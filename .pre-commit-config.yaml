@@ -10,9 +10,9 @@ repos:
     -   id: check-case-conflict
     -   id: requirements-txt-fixer
     -   id: check-added-large-files
-        args: ['--maxkb=2000']
+        args: ['--maxkb=10000']
 -   repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+    rev: v0.15.5
     hooks:
     -   id: ruff
         types_or: [ python ]

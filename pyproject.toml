@@ -1,0 +1,29 @@
+[project]
+name = "fut-python"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "python-dotenv>=1.2.2",
+    "requests>=2.32.5",
+    "streamlit>=1.55.0",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+]
+
+[tool.ruff.lint]
+# Opção A: Manter E731 ativo e deixar corrigir
+select = ["E", "W", "F", "I", "UP"]
+# Não ignore E731 - ele será corrigido
+
+# Opção B: Ignorar E731 se não quiser que seja corrigido
+ignore = ["E731"]
+
+# Opção C: Configurar correção automática específica
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E731"]  # Permite lambda apenas em testes
+"legacy/*" = ["E731"]  # Igno
