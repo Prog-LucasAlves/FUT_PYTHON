@@ -38,6 +38,14 @@ def getDataTotal():
         df = pd.read_csv(io.BytesIO(response.content))
         print(f"Sucesso! DataFrame criado com {len(df)} linhas.")
         df.to_csv(f"data_total/dados_{FONTE}.csv", index=False, sep=";")
+
+        # Criar um csv com os nome das colunas
+        df.columns.to_series().index.to_series().to_csv(
+            f"data_total/columns_{FONTE}.csv",
+            header=False,
+            index=False,
+        )
+
         return df
     else:
         print(f"Erro na requisição: {response.status_code}")
