@@ -909,15 +909,44 @@ with tab4:
     )
 
     jogosdiaselecionado1 = load_data_today()[load_data_today()["Date"] == dateJD][
-        ["Date", "Time", "League", "Home", "Away", "Odd_H_Back", "Odd_CS_0x1_Lay"]
+        [
+            "Date",
+            "Time",
+            "League",
+            "Home",
+            "Away",
+            "Odd_H_Back",
+            "Odd_A_Back",
+            "Odd_Over25_FT_Back",
+        ]
     ]
 
     filtro1 = lambda df: (
         df[
-            (df["Odd_H_Back"] >= 1.80)
-            & (df["Odd_H_Back"] <= 2.09)
-            & (df["Odd_CS_0x1_Lay"] >= 18.00)
-            & (df["Odd_CS_0x1_Lay"] <= 19.90)
+            (  # 1º Condição 2.10-2.49 | 3.50-3.99 | 3.50-3.99
+                (df["Odd_H_Back"] >= 2.10)
+                & (df["Odd_H_Back"] <= 2.49)
+                & (df["Odd_A_Back"] >= 3.50)
+                & (df["Odd_A_Back"] <= 3.99)
+                & (df["Odd_Over25_FT_Back"] >= 3.50)
+                & (df["Odd_Over25_FT_Back"] <= 3.99)
+            )
+            | (  # 2º Condição 4.00-4.99 | 1.80-2.09 | 1.80-2.09
+                (df["Odd_H_Back"] >= 4.00)
+                & (df["Odd_H_Back"] <= 4.99)
+                & (df["Odd_A_Back"] >= 1.80)
+                & (df["Odd_A_Back"] <= 2.09)
+                & (df["Odd_Over25_FT_Back"] >= 1.80)
+                & (df["Odd_Over25_FT_Back"] <= 2.09)
+            )
+            | (  # 3º Condição 4.00-4.99 | 2.10-2.49 | 2.10-2.49
+                (df["Odd_H_Back"] >= 4.00)
+                & (df["Odd_H_Back"] <= 4.99)
+                & (df["Odd_A_Back"] >= 2.10)
+                & (df["Odd_A_Back"] <= 2.49)
+                & (df["Odd_Over25_FT_Back"] >= 2.10)
+                & (df["Odd_Over25_FT_Back"] <= 2.49)
+            )
         ]
         if isinstance(df, pd.DataFrame)
         else pd.DataFrame()
@@ -925,7 +954,7 @@ with tab4:
 
     jogosfiltrados1 = filtro1(jogosdiaselecionado1)
 
-    st.write("### Lay 0x1")
+    st.write("### Over 2.5 FT")
     st.dataframe(
         jogosfiltrados1,
         hide_index=True,
