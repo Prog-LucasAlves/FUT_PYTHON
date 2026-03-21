@@ -14,11 +14,17 @@ repos:
 -   repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.5
     hooks:
-    -   id: ruff
-        types_or: [ python ]
-        args: [--fix, --line-length=120]  # adicione aqui
-    -   id: ruff-format
-        types_or: [ python ]
+      - id: ruff
+        types_or: [python, pyi]
+        args: [
+          --fix,
+          --line-length=120,
+          --ignore=E722,
+          --extend-select=I,
+        ]
+
+      - id: ruff-format
+        types_or: [python, pyi]
         args: [--line-length=120]
 -   repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1
