@@ -20,6 +20,7 @@ repos:
           --fix,
           --line-length=200,
           --ignore=E722,
+          --ignore=E701,
           --extend-select=I,
         ]
 
