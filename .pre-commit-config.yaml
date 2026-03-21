@@ -18,7 +18,7 @@ repos:
         types_or: [python, pyi]
         args: [
           --fix,
-          --line-length=120,
+          --line-length=200,
           --ignore=E722,
           --extend-select=I,
         ]
