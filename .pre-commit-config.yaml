@@ -39,7 +39,3 @@ repos:
     rev: 6.1.0
     hooks:
     -   id: flake8
-        args: [
-            --max-line-length=120,
-            --extend-ignore=E501  # mantém outras verificações do flake8
-        ]
