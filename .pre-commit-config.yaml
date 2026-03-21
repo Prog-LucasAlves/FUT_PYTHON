@@ -35,3 +35,8 @@ repos:
     rev: v4.0.0
     hooks:
     -   id: add-trailing-comma
+-   repo: https://github.com/pycqa/flake8
+    rev: 6.1.0  # ou versão mais recente
+    hooks:
+    -   id: flake8
+        args: [--max-line-length=120, --ignore=E501]
