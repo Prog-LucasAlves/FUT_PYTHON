@@ -11,7 +11,8 @@ load_dotenv()
 # Configuração da API
 TOKEN = os.getenv("API_KEY")
 HEADERS = {"Authorization": f"Token {TOKEN}"}
-FONTE = "betfair"
+FONTE1 = "betfair"
+FONTE2 = "footystats"
 
 # Cria a pasta 'data_total' se não existir
 if not os.path.exists("data_total"):
@@ -24,10 +25,10 @@ if not os.path.exists("data_day"):
     print("Pasta 'data_day' criada com sucesso!")
 
 
-def getDataTotal():
+def getDataTotalfootystats():
     """Baixa os dados da API e retorna um DataFrame."""
-    print(f"Baixando dados da fonte '{FONTE}' ...")
-    URL = f"https://api.futpythontrader.com/api/dados/{FONTE}/download/"
+    print(f"Baixando dados da fonte '{FONTE2}' ...")
+    URL = f"https://api.futpythontrader.com/api/dados/{FONTE2}/download/"
     response = requests.get(
         URL,
         headers=HEADERS,
@@ -37,11 +38,40 @@ def getDataTotal():
         # Lê os bytes do CSV diretamente para um DataFrame
         df = pd.read_csv(io.BytesIO(response.content))
         print(f"Sucesso! DataFrame criado com {len(df)} linhas.")
-        df.to_csv(f"data_total/dados_{FONTE}.csv", index=False, sep=";")
+        df.to_csv(f"data_total/dados_{FONTE2}.csv", index=False, sep=";")
 
         # Criar um csv com os nome das colunas
         df.columns.to_series().index.to_series().to_csv(
-            f"data_total/columns_{FONTE}.csv",
+            f"data_total/columns_{FONTE2}.csv",
+            header=False,
+            index=False,
+        )
+
+        return df
+    else:
+        print(f"Erro na requisição: {response.status_code}")
+        print(response.text)
+        return pd.DataFrame()
+
+
+def getDataTotal():
+    """Baixa os dados da API e retorna um DataFrame."""
+    print(f"Baixando dados da fonte '{FONTE1}' ...")
+    URL = f"https://api.futpythontrader.com/api/dados/{FONTE1}/download/"
+    response = requests.get(
+        URL,
+        headers=HEADERS,
+    )
+
+    if response.status_code == 200:
+        # Lê os bytes do CSV diretamente para um DataFrame
+        df = pd.read_csv(io.BytesIO(response.content))
+        print(f"Sucesso! DataFrame criado com {len(df)} linhas.")
+        df.to_csv(f"data_total/dados_{FONTE1}.csv", index=False, sep=";")
+
+        # Criar um csv com os nome das colunas
+        df.columns.to_series().index.to_series().to_csv(
+            f"data_total/columns_{FONTE1}.csv",
             header=False,
             index=False,
         )
@@ -55,7 +85,7 @@ def getDataTotal():
 
 def getDataDay():
     """Baixa os dados diários da API e retorna um DataFrame."""
-    print(f"Baixando dados diários da fonte '{FONTE}' ...")
+    print(f"Baixando dados diários da fonte '{FONTE1}' ...")
 
     # Pegar coma data de hoje, amanha e dpois
     date_hoje = datetime.date.today()
@@ -72,7 +102,7 @@ def getDataDay():
 
         if response.status_code == 200:
             df = pd.read_csv(io.BytesIO(response.content))
-            df.to_csv(f"data_day/dados_day_{FONTE}_{i}.csv", index=False, sep=";")
+            df.to_csv(f"data_day/dados_day_{FONTE1}_{i}.csv", index=False, sep=";")
         else:
             print(f"Erro na requisição: {response.status_code}")
             print(response.text)
@@ -564,5 +594,6 @@ def createAwayHTGoals00Result():
 
 
 if __name__ == "__main__":
+    getDataTotalfootystats()
     getDataTotal()
     getDataDay()
