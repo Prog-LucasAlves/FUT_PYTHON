@@ -917,35 +917,88 @@ with tab4:
             "Away",
             "Odd_H_Back",
             "Odd_A_Back",
-            "Odd_Over25_FT_Back",
+            "Odd_CS_0x1_Lay",
         ]
     ]
 
     filtro1 = lambda df: (
         df[
-            (  # 1º Condição 2.10-2.49 | 3.50-3.99 | 3.50-3.99
+            (  # 1º Condição 1.80-2.09 | 4.00-4.99 | 20.0+
+                (df["Odd_H_Back"] >= 1.80)
+                & (df["Odd_H_Back"] <= 2.09)
+                & (df["Odd_A_Back"] >= 4.00)
+                & (df["Odd_A_Back"] <= 4.99)
+                & (df["Odd_CS_0x1_Lay"] >= 20.00)
+            )
+            | (  # 2º Condição 1.80-2.09 | 4.00-4.99 | 13.0-13.9
+                (df["Odd_H_Back"] >= 1.80)
+                & (df["Odd_H_Back"] <= 2.09)
+                & (df["Odd_A_Back"] >= 4.00)
+                & (df["Odd_A_Back"] <= 4.900)
+                & (df["Odd_CS_0x1_Lay"] >= 13.00)
+                & (df["Odd_CS_0x1_Lay"] <= 19.90)
+            )
+            | (  # 3º Condição 2.10-2.49 | 3.50-3.99 | 12.0-12.9
+                (df["Odd_H_Back"] >= 2.10)
+                & (df["Odd_H_Back"] <= 2.49)
+                & (df["Odd_A_Back"] >= 3.50)
+                & (df["Odd_A_Back"] <= 3.900)
+                & (df["Odd_CS_0x1_Lay"] >= 12.00)
+                & (df["Odd_CS_0x1_Lay"] <= 12.90)
+            )
+            | (  # 4º Condição 1.80-2.09 | 4.00-4.99 | 18.0-19.9
+                (df["Odd_H_Back"] >= 1.80)
+                & (df["Odd_H_Back"] <= 2.09)
+                & (df["Odd_A_Back"] >= 4.00)
+                & (df["Odd_A_Back"] <= 4.99)
+                & (df["Odd_CS_0x1_Lay"] >= 18.00)
+                & (df["Odd_CS_0x1_Lay"] <= 19.90)
+            )
+            | (  # 5° Condição 2.10-2.49 | 3.50-3.99 | 15.0-15.9
                 (df["Odd_H_Back"] >= 2.10)
                 & (df["Odd_H_Back"] <= 2.49)
                 & (df["Odd_A_Back"] >= 3.50)
                 & (df["Odd_A_Back"] <= 3.99)
-                & (df["Odd_Over25_FT_Back"] >= 3.50)
-                & (df["Odd_Over25_FT_Back"] <= 3.99)
+                & (df["Odd_CS_0x1_Lay"] >= 15.00)
+                & (df["Odd_CS_0x1_Lay"] <= 15.90)
             )
-            | (  # 2º Condição 4.00-4.99 | 1.80-2.09 | 1.80-2.09
-                (df["Odd_H_Back"] >= 4.00)
-                & (df["Odd_H_Back"] <= 4.99)
-                & (df["Odd_A_Back"] >= 1.80)
-                & (df["Odd_A_Back"] <= 2.09)
-                & (df["Odd_Over25_FT_Back"] >= 1.80)
-                & (df["Odd_Over25_FT_Back"] <= 2.09)
+            | (  # 6º Condição 2.50-2.99 | 2.50-2.99 | 11.0-11.9
+                (df["Odd_H_Back"] >= 2.50)
+                & (df["Odd_H_Back"] <= 2.99)
+                & (df["Odd_A_Back"] >= 2.50)
+                & (df["Odd_A_Back"] <= 2.99)
+                & (df["Odd_CS_0x1_Lay"] >= 11.00)
+                & (df["Odd_CS_0x1_Lay"] <= 11.90)
             )
-            | (  # 3º Condição 4.00-4.99 | 2.10-2.49 | 2.10-2.49
-                (df["Odd_H_Back"] >= 4.00)
-                & (df["Odd_H_Back"] <= 4.99)
-                & (df["Odd_A_Back"] >= 2.10)
-                & (df["Odd_A_Back"] <= 2.49)
-                & (df["Odd_Over25_FT_Back"] >= 2.10)
-                & (df["Odd_Over25_FT_Back"] <= 2.49)
+            | (  # 7º Condição 1.80-2.09 | 5.00+ | 15.0-15.9
+                (df["Odd_H_Back"] >= 1.80)
+                & (df["Odd_H_Back"] <= 2.09)
+                & (df["Odd_A_Back"] >= 5.00)
+                & (df["Odd_CS_0x1_Lay"] >= 15.00)
+                & (df["Odd_CS_0x1_Lay"] <= 15.90)
+            )
+            | (  # 8º Condição 1.80-2.09 | 5.00+ | 14.0-14.9
+                (df["Odd_H_Back"] >= 1.80)
+                & (df["Odd_H_Back"] <= 2.09)
+                & (df["Odd_A_Back"] >= 5.00)
+                & (df["Odd_CS_0x1_Lay"] >= 14.00)
+                & (df["Odd_CS_0x1_Lay"] <= 14.90)
+            )
+            | (  # 9° Condição 2.10-2.49 | 4.00-4.99 | 11.0-11.9
+                (df["Odd_H_Back"] >= 2.10)
+                & (df["Odd_H_Back"] <= 2.49)
+                & (df["Odd_A_Back"] >= 4.00)
+                & (df["Odd_A_Back"] <= 4.99)
+                & (df["Odd_CS_0x1_Lay"] >= 11.00)
+                & (df["Odd_CS_0x1_Lay"] <= 11.90)
+            )
+            | (  # 10º Condição 2.10-2.49 | 3.50-3.99 | 16.0-17.9
+                (df["Odd_H_Back"] >= 2.10)
+                & (df["Odd_H_Back"] <= 2.49)
+                & (df["Odd_A_Back"] >= 3.50)
+                & (df["Odd_A_Back"] <= 3.99)
+                & (df["Odd_CS_0x1_Lay"] >= 16.00)
+                & (df["Odd_CS_0x1_Lay"] <= 17.90)
             )
         ]
         if isinstance(df, pd.DataFrame)
@@ -954,7 +1007,7 @@ with tab4:
 
     jogosfiltrados1 = filtro1(jogosdiaselecionado1)
 
-    st.write("### Over 2.5 FT")
+    st.write("### Lay 0x1")
     st.dataframe(
         jogosfiltrados1,
         hide_index=True,
