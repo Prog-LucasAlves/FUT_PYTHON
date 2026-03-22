@@ -222,47 +222,59 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
     reasons = []
 
     # Critérios de Odds
+    odd_h_back = current_match_data.get("Odd_H_Back", 0)
+    odd_a_back = current_match_data.get("Odd_A_Back", 0)
     odd_lay_0x1 = current_match_data.get("Odd_CS_0x1_Lay", 0)
     odd_btts = current_match_data.get("Odd_BTTS_Yes_Back", 0)
     odd_over25 = current_match_data.get("Odd_Over25_FT_Back", 0)
-    odd_h = current_match_data.get("Odd_H_Back", 0)
 
-    if 0 < odd_lay_0x1 < 12:
-        score += 2
-        reasons.append("Odd Lay 0x1 atrativa (Responsabilidade controlada)")
+    # 1º Condição 1.80-2.09 | 4.00-4.99 | 20.0+
+    cond1 = (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.99) and (odd_lay_0x1 >= 20.00)
+    # 2º Condição 1.80-2.09 | 4.00-4.99 | 13.0-13.9
+    cond2 = (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.90) and (13.00 <= odd_lay_0x1 <= 19.90)
+    # 3º Condição 2.10-2.49 | 3.50-3.99 | 12.0-12.9
+    cond3 = (2.10 <= odd_h_back <= 2.49) and (3.50 <= odd_a_back <= 3.90) and (12.00 <= odd_lay_0x1 <= 12.90)
+    # 4º Condição 1.80-2.09 | 4.00-4.99 | 18.0-19.9
+    cond4 = (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.99) and (18.00 <= odd_lay_0x1 <= 19.90)
+    # 5° Condição 2.10-2.49 | 3.50-3.99 | 15.0-15.9
+    cond5 = (2.10 <= odd_h_back <= 2.49) and (3.50 <= odd_a_back <= 3.99) and (15.00 <= odd_lay_0x1 <= 15.90)
+    # 6º Condição 2.50-2.99 | 2.50-2.99 | 11.0-11.9
+    cond6 = (2.50 <= odd_h_back <= 2.99) and (2.50 <= odd_a_back <= 2.99) and (11.00 <= odd_lay_0x1 <= 11.90)
+    # 7º Condição 1.80-2.09 | 5.00+ | 15.0-15.9
+    cond7 = (1.80 <= odd_h_back <= 2.09) and (odd_a_back >= 5.00) and (15.00 <= odd_lay_0x1 <= 15.90)
+    # 8º Condição 1.80-2.09 | 5.00+ | 14.0-14.9
+    cond8 = (1.80 <= odd_h_back <= 2.09) and (odd_a_back >= 5.00) and (14.00 <= odd_lay_0x1 <= 14.90)
+    # 9° Condição 2.10-2.49 | 4.00-4.99 | 11.0-11.9
+    cond9 = (2.10 <= odd_h_back <= 2.49) and (4.00 <= odd_a_back <= 4.99) and (11.00 <= odd_lay_0x1 <= 11.90)
+    # 10º Condição 2.10-2.49 | 3.50-3.99 | 16.0-17.9
+    cond10 = (2.10 <= odd_h_back <= 2.49) and (3.50 <= odd_a_back <= 3.99) and (16.00 <= odd_lay_0x1 <= 17.90)
 
+    if any([cond1, cond2, cond3, cond4, cond5, cond6, cond7, cond8, cond9, cond10]):
+        score += 5
+        reasons.append("Padrão de Odds Detectado (Match Odds + Lay 0x1)")
+
+    # Critérios Adicionais de Odds
     if 0 < odd_btts < 1.90:
         score += 2
-        reasons.append(
-            f"Odd BTTS baixa ({odd_btts:.2f}): Alta tendência de ambos marcarem",
-        )
+        reasons.append(f"Odd BTTS baixa ({odd_btts:.2f}): Tendência de ambos marcarem")
 
     if 0 < odd_over25 < 2.10:
         score += 1
-        reasons.append(
-            f"Odd Over 2.5 baixa ({odd_over25:.2f}): Expectativa de muitos gols",
-        )
+        reasons.append(f"Odd Over 2.5 baixa ({odd_over25:.2f}): Expectativa de gols")
 
-    if 0 < odd_h < 2.20:
+    # Filtros de Variância e Custo do Gol
+    if stats_h["variance"] > 1.0:
         score += 1
-        reasons.append(f"Mandante favorito ({odd_h:.2f}): Alta chance de gol do Home")
+        reasons.append(f"Variância Mandante Alta ({stats_h['variance']:.2f}): Time inconsistente (Bom para Lay)")
+
+    if stats_h["cost"] > 1.2:
+        score += 1
+        reasons.append(f"Custo do Gol Mandante Alto ({stats_h['cost']:.2f}): Dificuldade em manter placares magros")
 
     # Critérios Estatísticos FootyStats
     if stats_h["avg_xg"] > 1.5:
         score += 1
-        reasons.append(
-            f"xG do Mandante alto ({stats_h['avg_xg']:.2f}): Forte produção ofensiva",
-        )
-
-    if stats_h["avg_ppg"] > 1.8:
-        score += 1
-        reasons.append(
-            f"PPG do Mandante alto ({stats_h['avg_ppg']:.2f}): Time sólido em casa",
-        )
-
-    if stats_h["avg_da"] > 45:
-        score += 1
-        reasons.append(f"Ataques Perigosos do Mandante alto ({stats_h['avg_da']:.0f})")
+        reasons.append(f"xG Mandante alto ({stats_h['avg_xg']:.2f}): Forte produção ofensiva")
 
     if poisson_0x1 < 7:
         score += 2
@@ -271,14 +283,12 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
     combined_success = 100 - poisson_0x1
     if combined_success > 92:
         score += 2
-        reasons.append(
-            f"Taxa de sucesso histórica combinada excelente ({combined_success:.1f}%)",
-        )
+        reasons.append(f"Sucesso histórico excelente ({combined_success:.1f}%)")
 
     recommendation = "NÃO INDICADO"
-    if score >= 9:
+    if score >= 10:
         recommendation = "FORTE INDICAÇÃO"
-    elif score >= 5:
+    elif score >= 6:
         recommendation = "INDICAÇÃO MODERADA"
 
     return {
@@ -398,7 +408,7 @@ if not df_today.empty:
                     f"""
                     <div style="background-color: {color}; color: black; padding: 20px; border-radius: 10px; text-align: center;">
                         <h2 style="margin:0;">{results["recommendation"]}</h2>
-                        <p style="margin:0; font-weight: bold;">Score de Confiança: {results["score"]}/11</p>
+                        <p style="margin:0; font-weight: bold;">Score de Confiança: {results["score"]}/15</p>
                     </div>
                 """,
                     unsafe_allow_html=True,
