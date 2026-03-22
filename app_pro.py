@@ -123,6 +123,67 @@ def load_today_games():
     return pd.DataFrame()
 
 
+# Funções Utilitárias de Formatação
+def format_minutes(decimal_min):
+    if pd.isna(decimal_min) or decimal_min == 0:
+        return "N/A"
+    minutes = int(decimal_min)
+    seconds = int((decimal_min - minutes) * 60)
+    return f"{minutes}'{seconds:02d}\""
+
+
+# Motor de Análise de Timing de Gols
+def analyze_goal_timing(df_games, home_team, away_team):
+    h_games = df_games[df_games["Home"] == home_team].copy()
+    a_games = df_games[df_games["Away"] == away_team].copy()
+
+    def get_timing_stats(games, is_home):
+        col_mins = "Min_Goals_H" if is_home else "Min_Goals_A"
+        # opp_col_mins = "Min_Goals_A" if is_home else "Min_Goals_H"
+
+        # 1. Primeiro gol marcado pelo time (Individual)
+        first_goal_team = games[col_mins].apply(lambda x: min(x) if len(x) > 0 else None).dropna()
+
+        # 2. Primeiro gol da partida (Ambos os times)
+        def match_first(row):
+            h_mins = row["Min_Goals_H"]
+            a_mins = row["Min_Goals_A"]
+            all_mins = h_mins + a_mins
+            return min(all_mins) if len(all_mins) > 0 else None
+
+        first_goal_match = games.apply(match_first, axis=1).dropna()
+
+        # 3. Cenário 0x0 HT
+        games_00_ht = games[(games["Goals_H_HT"] == 0) & (games["Goals_A_HT"] == 0)]
+
+        def first_in_2h(mins_list):
+            m2h = [m for m in mins_list if m > 45]
+            return min(m2h) if len(m2h) > 0 else None
+
+        first_team_2h = games_00_ht[col_mins].apply(first_in_2h).dropna()
+
+        def match_first_2h(row):
+            all_2h = [m for m in (row["Min_Goals_H"] + row["Min_Goals_A"]) if m > 45]
+            return min(all_2h) if len(all_2h) > 0 else None
+
+        first_match_2h = games_00_ht.apply(match_first_2h, axis=1).dropna()
+
+        return {
+            "avg_first_team": first_goal_team.mean(),
+            "avg_first_match": first_goal_match.mean(),
+            "avg_team_2h_00ht": first_team_2h.mean(),
+            "avg_match_2h_00ht": first_match_2h.mean(),
+            "sample_size": len(games),
+            "sample_00ht": len(games_00_ht),
+            "raw_first_team": first_goal_team.tolist(),
+        }
+
+    stats_h = get_timing_stats(h_games, True)
+    stats_a = get_timing_stats(a_games, False)
+
+    return stats_h, stats_a
+
+
 # Motor de Cálculo Estatístico PRO
 def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
     home_h = df_games[df_games["Home"] == home_team].copy()
@@ -472,6 +533,62 @@ if not df_today.empty:
                 st.write(f"Home PPG: {results['home']['avg_ppg']:.2f}")
                 st.write(f"Away PPG: {results['away']['avg_ppg']:.2f}")
                 st.markdown("</div>", unsafe_allow_html=True)
+
+            # --- NOVA SEÇÃO: ANÁLISE QUANTITATIVA DE TIMING ---
+            st.markdown("---")
+            st.subheader("⏱️ Análise de Timing e Explosão (First Goal)")
+
+            t_stats_h, t_stats_a = analyze_goal_timing(df_hist, m_data["Home"], m_data["Away"])
+
+            if t_stats_h and t_stats_a:
+                col_t1, col_t2 = st.columns(2)
+
+                with col_t1:
+                    st.markdown(f"#### 🏠 {m_data['Home']} (Timing)")
+                    data_t_h = {
+                        "Métrica": ["Primeiro Gol (Individual)", "Primeiro Gol (Partida)", "Primeiro Gol 2T (se 0x0 HT)", "Primeiro Gol Partida 2T (se 0x0 HT)"],
+                        "Média": [
+                            format_minutes(t_stats_h["avg_first_team"]),
+                            format_minutes(t_stats_h["avg_first_match"]),
+                            format_minutes(t_stats_h["avg_team_2h_00ht"]),
+                            format_minutes(t_stats_h["avg_match_2h_00ht"]),
+                        ],
+                        "Amostra": [f"{t_stats_h['sample_size']} jogos", f"{t_stats_h['sample_size']} jogos", f"{t_stats_h['sample_00ht']} jogos", f"{t_stats_h['sample_00ht']} jogos"],
+                    }
+                    st.table(pd.DataFrame(data_t_h))
+
+                with col_t2:
+                    st.markdown(f"#### 🚀 {m_data['Away']} (Timing)")
+                    data_t_a = {
+                        "Métrica": ["Primeiro Gol (Individual)", "Primeiro Gol (Partida)", "Primeiro Gol 2T (se 0x0 HT)", "Primeiro Gol Partida 2T (se 0x0 HT)"],
+                        "Média": [
+                            format_minutes(t_stats_a["avg_first_team"]),
+                            format_minutes(t_stats_a["avg_first_match"]),
+                            format_minutes(t_stats_a["avg_team_2h_00ht"]),
+                            format_minutes(t_stats_a["avg_match_2h_00ht"]),
+                        ],
+                        "Amostra": [f"{t_stats_a['sample_size']} jogos", f"{t_stats_a['sample_size']} jogos", f"{t_stats_a['sample_00ht']} jogos", f"{t_stats_a['sample_00ht']} jogos"],
+                    }
+                    st.table(pd.DataFrame(data_t_a))
+
+                # Gráfico Comparativo de Distribuição de Tempo
+                st.markdown("#### 📊 Distribuição do Minuto do Primeiro Gol")
+                fig_time = go.Figure()
+                fig_time.add_trace(go.Box(y=t_stats_h["raw_first_team"], name=m_data["Home"], marker_color="#00ff88", boxpoints="all"))
+                fig_time.add_trace(go.Box(y=t_stats_a["raw_first_team"], name=m_data["Away"], marker_color="#ff4b4b", boxpoints="all"))
+                fig_time.update_layout(title="Boxplot: Quando o 1º gol costuma sair?", yaxis_title="Minuto", template="plotly_dark", height=400, showlegend=False)
+                # Adicionar linha de 45' para referência HT
+                fig_time.add_hline(y=45, line_dash="dash", line_color="white", annotation_text="Fim 1T")
+                st.plotly_chart(fig_time, use_container_width=True)
+
+                st.info("""
+                💡 **Interpretação:**
+                - **Primeiro Gol (Individual):** Média de quando o time faz seu primeiro gol.
+                - **Primeiro Gol (Partida):** Média de quando sai o primeiro gol do jogo (qualquer time).
+                - **Cenário 0x0 HT:** Foco total no comportamento das equipes no segundo tempo quando o placar está travado.
+                """)
+            else:
+                st.warning("Dados de minutagem insuficientes para este confronto.")
 
             # GRÁFICOS DE VOLATILIDADE
             st.markdown("---")
