@@ -67,6 +67,8 @@ def load_data():
                     "Possession_A",
                     "DangerousAttacks_H",
                     "DangerousAttacks_A",
+                    "Shots_H",
+                    "Shots_A",
                     "ShotsOnTarget_H",
                     "ShotsOnTarget_A",
                     "Corners_H",
@@ -119,8 +121,85 @@ def load_today_games():
             if df_list:
                 df = pd.concat(df_list, ignore_index=True)
                 df["Date"] = pd.to_datetime(df["Date"])
+                df = df.drop_duplicates(subset=["Date", "Home", "Away"])
                 return df
     return pd.DataFrame()
+
+
+# Funções Utilitárias de Formatação
+def format_minutes(decimal_min):
+    if pd.isna(decimal_min) or decimal_min == 0:
+        return "N/A"
+    minutes = int(decimal_min)
+    seconds = int((decimal_min - minutes) * 60)
+    return f"{minutes}'{seconds:02d}\""
+
+
+# Motor de Análise de Timing de Gols
+def analyze_goal_timing(df_games, home_team, away_team):
+    h_games = df_games[df_games["Home"] == home_team].copy()
+    a_games = df_games[df_games["Away"] == away_team].copy()
+
+    def get_frequent_scores(games, prefix_h="Goals_H", prefix_a="Goals_A"):
+        def process_scores(df, suffix):
+            scores = df[f"{prefix_h}_{suffix}"].astype(int).astype(str) + "x" + df[f"{prefix_a}_{suffix}"].astype(int).astype(str)
+            counts = scores.value_counts(normalize=True) * 100
+            return counts.head(5).to_dict()
+
+        return {"HT": process_scores(games, "HT"), "FT": process_scores(games, "FT")}
+
+    def get_timing_stats(games, is_home):
+        col_mins = "Min_Goals_H" if is_home else "Min_Goals_A"
+        # opp_col_mins = "Min_Goals_A" if is_home else "Min_Goals_H"
+
+        # 1. Primeiro gol marcado pelo time (Individual)
+        first_goal_team = games[col_mins].apply(lambda x: min(x) if len(x) > 0 else None).dropna()
+
+        # 2. Primeiro gol da partida (Ambos os times)
+        def match_first(row):
+            h_mins = row["Min_Goals_H"]
+            a_mins = row["Min_Goals_A"]
+            all_mins = h_mins + a_mins
+            return min(all_mins) if len(all_mins) > 0 else None
+
+        first_goal_match = games.apply(match_first, axis=1).dropna()
+
+        # 3. Cenário 0x0 HT
+        games_00_ht = games[(games["Goals_H_HT"] == 0) & (games["Goals_A_HT"] == 0)]
+
+        def first_in_2h(mins_list):
+            m2h = [m for m in mins_list if m > 45]
+            return min(m2h) if len(m2h) > 0 else None
+
+        first_team_2h = games_00_ht[col_mins].apply(first_in_2h).dropna()
+
+        def match_first_2h(row):
+            all_2h = [m for m in (row["Min_Goals_H"] + row["Min_Goals_A"]) if m > 45]
+            return min(all_2h) if len(all_2h) > 0 else None
+
+        first_match_2h = games_00_ht.apply(match_first_2h, axis=1).dropna()
+
+        return {
+            "avg_first_team": first_goal_team.mean(),
+            "avg_first_match": first_goal_match.mean(),
+            "avg_team_2h_00ht": first_team_2h.mean(),
+            "avg_match_2h_00ht": first_match_2h.mean(),
+            "sample_size": len(games),
+            "sample_00ht": len(games_00_ht),
+            "raw_first_team": first_goal_team.tolist(),
+        }
+
+    stats_h = get_timing_stats(h_games, True)
+    stats_a = get_timing_stats(a_games, False)
+
+    # Adicionar placares frequentes
+    stats_h["frequent_scores"] = get_frequent_scores(h_games)
+    stats_a["frequent_scores"] = get_frequent_scores(a_games)
+
+    combined_games = pd.concat([h_games, a_games]).drop_duplicates(subset=["Date", "Home", "Away"])
+    stats_combined_scores = get_frequent_scores(combined_games)
+
+    return stats_h, stats_a, stats_combined_scores
 
 
 # Motor de Cálculo Estatístico PRO
@@ -151,6 +230,12 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
         avg_ppg = games[ppg_col].mean() if ppg_col and not games[ppg_col].dropna().empty else 0
         avg_da = games[da_col].mean() if da_col and not games[da_col].dropna().empty else 0
 
+        # Métrica de Chutes por Gol
+        shots_col = f"Shots_{prefix}"
+        total_shots = games[shots_col].sum() if shots_col in games.columns else 0
+        total_goals = games[col_goals].sum()
+        shots_per_goal = total_shots / total_goals if total_goals > 0 else 0
+
         return {
             "mean": mean_goals,
             "variance": variance,
@@ -162,6 +247,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
             "avg_xg": avg_xg,
             "avg_ppg": avg_ppg,
             "avg_da": avg_da,
+            "shots_per_goal": shots_per_goal,
         }
 
     stats_h = get_stats(home_h, "Goals_H_FT", "Min_Goals_H", "H")
@@ -222,47 +308,59 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
     reasons = []
 
     # Critérios de Odds
+    odd_h_back = current_match_data.get("Odd_H_Back", 0)
+    odd_a_back = current_match_data.get("Odd_A_Back", 0)
     odd_lay_0x1 = current_match_data.get("Odd_CS_0x1_Lay", 0)
     odd_btts = current_match_data.get("Odd_BTTS_Yes_Back", 0)
     odd_over25 = current_match_data.get("Odd_Over25_FT_Back", 0)
-    odd_h = current_match_data.get("Odd_H_Back", 0)
 
-    if 0 < odd_lay_0x1 < 12:
-        score += 2
-        reasons.append("Odd Lay 0x1 atrativa (Responsabilidade controlada)")
+    # 1º Condição 1.80-2.09 | 4.00-4.99 | 20.0+
+    cond1 = (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.99) and (odd_lay_0x1 >= 20.00)
+    # 2º Condição 1.80-2.09 | 4.00-4.99 | 13.0-13.9
+    cond2 = (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.90) and (13.00 <= odd_lay_0x1 <= 19.90)
+    # 3º Condição 2.10-2.49 | 3.50-3.99 | 12.0-12.9
+    cond3 = (2.10 <= odd_h_back <= 2.49) and (3.50 <= odd_a_back <= 3.90) and (12.00 <= odd_lay_0x1 <= 12.90)
+    # 4º Condição 1.80-2.09 | 4.00-4.99 | 18.0-19.9
+    cond4 = (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.99) and (18.00 <= odd_lay_0x1 <= 19.90)
+    # 5° Condição 2.10-2.49 | 3.50-3.99 | 15.0-15.9
+    cond5 = (2.10 <= odd_h_back <= 2.49) and (3.50 <= odd_a_back <= 3.99) and (15.00 <= odd_lay_0x1 <= 15.90)
+    # 6º Condição 2.50-2.99 | 2.50-2.99 | 11.0-11.9
+    cond6 = (2.50 <= odd_h_back <= 2.99) and (2.50 <= odd_a_back <= 2.99) and (11.00 <= odd_lay_0x1 <= 11.90)
+    # 7º Condição 1.80-2.09 | 5.00+ | 15.0-15.9
+    cond7 = (1.80 <= odd_h_back <= 2.09) and (odd_a_back >= 5.00) and (15.00 <= odd_lay_0x1 <= 15.90)
+    # 8º Condição 1.80-2.09 | 5.00+ | 14.0-14.9
+    cond8 = (1.80 <= odd_h_back <= 2.09) and (odd_a_back >= 5.00) and (14.00 <= odd_lay_0x1 <= 14.90)
+    # 9° Condição 2.10-2.49 | 4.00-4.99 | 11.0-11.9
+    cond9 = (2.10 <= odd_h_back <= 2.49) and (4.00 <= odd_a_back <= 4.99) and (11.00 <= odd_lay_0x1 <= 11.90)
+    # 10º Condição 2.10-2.49 | 3.50-3.99 | 16.0-17.9
+    cond10 = (2.10 <= odd_h_back <= 2.49) and (3.50 <= odd_a_back <= 3.99) and (16.00 <= odd_lay_0x1 <= 17.90)
 
+    if any([cond1, cond2, cond3, cond4, cond5, cond6, cond7, cond8, cond9, cond10]):
+        score += 5
+        reasons.append("Padrão de Odds Detectado (Match Odds + Lay 0x1)")
+
+    # Critérios Adicionais de Odds
     if 0 < odd_btts < 1.90:
         score += 2
-        reasons.append(
-            f"Odd BTTS baixa ({odd_btts:.2f}): Alta tendência de ambos marcarem",
-        )
+        reasons.append(f"Odd BTTS baixa ({odd_btts:.2f}): Tendência de ambos marcarem")
 
     if 0 < odd_over25 < 2.10:
         score += 1
-        reasons.append(
-            f"Odd Over 2.5 baixa ({odd_over25:.2f}): Expectativa de muitos gols",
-        )
+        reasons.append(f"Odd Over 2.5 baixa ({odd_over25:.2f}): Expectativa de gols")
 
-    if 0 < odd_h < 2.20:
+    # Filtros de Variância e Custo do Gol
+    if stats_h["variance"] > 1.0:
         score += 1
-        reasons.append(f"Mandante favorito ({odd_h:.2f}): Alta chance de gol do Home")
+        reasons.append(f"Variância Mandante Alta ({stats_h['variance']:.2f}): Time inconsistente (Bom para Lay)")
+
+    if stats_h["cost"] > 1.2:
+        score += 1
+        reasons.append(f"Custo do Gol Mandante Alto ({stats_h['cost']:.2f}): Dificuldade em manter placares magros")
 
     # Critérios Estatísticos FootyStats
     if stats_h["avg_xg"] > 1.5:
         score += 1
-        reasons.append(
-            f"xG do Mandante alto ({stats_h['avg_xg']:.2f}): Forte produção ofensiva",
-        )
-
-    if stats_h["avg_ppg"] > 1.8:
-        score += 1
-        reasons.append(
-            f"PPG do Mandante alto ({stats_h['avg_ppg']:.2f}): Time sólido em casa",
-        )
-
-    if stats_h["avg_da"] > 45:
-        score += 1
-        reasons.append(f"Ataques Perigosos do Mandante alto ({stats_h['avg_da']:.0f})")
+        reasons.append(f"xG Mandante alto ({stats_h['avg_xg']:.2f}): Forte produção ofensiva")
 
     if poisson_0x1 < 7:
         score += 2
@@ -271,14 +369,12 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
     combined_success = 100 - poisson_0x1
     if combined_success > 92:
         score += 2
-        reasons.append(
-            f"Taxa de sucesso histórica combinada excelente ({combined_success:.1f}%)",
-        )
+        reasons.append(f"Sucesso histórico excelente ({combined_success:.1f}%)")
 
     recommendation = "NÃO INDICADO"
-    if score >= 9:
+    if score >= 10:
         recommendation = "FORTE INDICAÇÃO"
-    elif score >= 5:
+    elif score >= 6:
         recommendation = "INDICAÇÃO MODERADA"
 
     return {
@@ -398,7 +494,7 @@ if not df_today.empty:
                     f"""
                     <div style="background-color: {color}; color: black; padding: 20px; border-radius: 10px; text-align: center;">
                         <h2 style="margin:0;">{results["recommendation"]}</h2>
-                        <p style="margin:0; font-weight: bold;">Score de Confiança: {results["score"]}/11</p>
+                        <p style="margin:0; font-weight: bold;">Score de Confiança: {results["score"]}/15</p>
                     </div>
                 """,
                     unsafe_allow_html=True,
@@ -462,6 +558,112 @@ if not df_today.empty:
                 st.write(f"Home PPG: {results['home']['avg_ppg']:.2f}")
                 st.write(f"Away PPG: {results['away']['avg_ppg']:.2f}")
                 st.markdown("</div>", unsafe_allow_html=True)
+
+            # Métrica de Chutes por Gol
+            st.markdown("---")
+            st.subheader("🎯 Eficiência de Finalização (Chutes por Gol)")
+            col_sh1, col_sh2 = st.columns(2)
+            with col_sh1:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.metric(f"Chutes/Gol - {m_data['Home']}", f"{results['home']['shots_per_goal']:.1f}")
+                st.write("Média de chutes necessários para marcar 1 gol")
+                st.markdown("</div>", unsafe_allow_html=True)
+            with col_sh2:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.metric(f"Chutes/Gol - {m_data['Away']}", f"{results['away']['shots_per_goal']:.1f}")
+                st.write("Média de chutes necessários para marcar 1 gol")
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            # --- NOVA SEÇÃO: ANÁLISE QUANTITATIVA DE TIMING ---
+            st.markdown("---")
+            st.subheader("⏱️ Análise de Timing e Explosão (First Goal)")
+
+            t_stats_h, t_stats_a, t_combined_scores = analyze_goal_timing(df_hist, m_data["Home"], m_data["Away"])
+
+            if t_stats_h and t_stats_a:
+                col_t1, col_t2 = st.columns(2)
+
+                with col_t1:
+                    st.markdown(f"#### 🏠 {m_data['Home']} (Timing)")
+                    data_t_h = {
+                        "Métrica": ["Primeiro Gol (Individual)", "Primeiro Gol (Partida)", "Primeiro Gol 2T (se 0x0 HT)", "Primeiro Gol Partida 2T (se 0x0 HT)"],
+                        "Média": [
+                            format_minutes(t_stats_h["avg_first_team"]),
+                            format_minutes(t_stats_h["avg_first_match"]),
+                            format_minutes(t_stats_h["avg_team_2h_00ht"]),
+                            format_minutes(t_stats_h["avg_match_2h_00ht"]),
+                        ],
+                        "Amostra": [f"{t_stats_h['sample_size']} jogos", f"{t_stats_h['sample_size']} jogos", f"{t_stats_h['sample_00ht']} jogos", f"{t_stats_h['sample_00ht']} jogos"],
+                    }
+                    st.table(pd.DataFrame(data_t_h))
+
+                with col_t2:
+                    st.markdown(f"#### 🚀 {m_data['Away']} (Timing)")
+                    data_t_a = {
+                        "Métrica": ["Primeiro Gol (Individual)", "Primeiro Gol (Partida)", "Primeiro Gol 2T (se 0x0 HT)", "Primeiro Gol Partida 2T (se 0x0 HT)"],
+                        "Média": [
+                            format_minutes(t_stats_a["avg_first_team"]),
+                            format_minutes(t_stats_a["avg_first_match"]),
+                            format_minutes(t_stats_a["avg_team_2h_00ht"]),
+                            format_minutes(t_stats_a["avg_match_2h_00ht"]),
+                        ],
+                        "Amostra": [f"{t_stats_a['sample_size']} jogos", f"{t_stats_a['sample_size']} jogos", f"{t_stats_a['sample_00ht']} jogos", f"{t_stats_a['sample_00ht']} jogos"],
+                    }
+                    st.table(pd.DataFrame(data_t_a))
+
+                # Gráfico Comparativo de Distribuição de Tempo
+                st.markdown("#### 📊 Distribuição do Minuto do Primeiro Gol")
+                fig_time = go.Figure()
+                fig_time.add_trace(go.Box(y=t_stats_h["raw_first_team"], name=m_data["Home"], marker_color="#00ff88", boxpoints="all"))
+                fig_time.add_trace(go.Box(y=t_stats_a["raw_first_team"], name=m_data["Away"], marker_color="#ff4b4b", boxpoints="all"))
+                fig_time.update_layout(title="Boxplot: Quando o 1º gol costuma sair?", yaxis_title="Minuto", template="plotly_dark", height=400, showlegend=False)
+                # Adicionar linha de 45' para referência HT
+                fig_time.add_hline(y=45, line_dash="dash", line_color="white", annotation_text="Fim 1T")
+                st.plotly_chart(fig_time, use_container_width=True)
+
+                # Visualização de Placares Frequentes
+                st.markdown("---")
+                st.subheader("🔢 Placares Mais Frequentes (%)")
+
+                def display_scores(scores_dict, title):
+                    st.write(f"**{title}**")
+                    df_scores = pd.DataFrame(list(scores_dict.items()), columns=["Placar", "Freq %"])
+                    df_scores = df_scores.sort_values("Freq %", ascending=False)
+                    fig = px.bar(df_scores, x="Placar", y="Freq %", text_auto=".1f", color="Freq %", color_continuous_scale="Viridis", template="plotly_dark")
+                    fig.update_layout(height=300, showlegend=False)
+                    st.plotly_chart(fig, use_container_width=True, key=f"scores_{title}")
+
+                tab_scores1, tab_scores2, tab_scores3 = st.tabs([f"🏠 {m_data['Home']}", f"🚀 {m_data['Away']}", "🤝 Confronto (Ambos)"])
+
+                with tab_scores1:
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        display_scores(t_stats_h["frequent_scores"]["HT"], "HT - Frequência")
+                    with c2:
+                        display_scores(t_stats_h["frequent_scores"]["FT"], "FT - Frequência")
+
+                with tab_scores2:
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        display_scores(t_stats_a["frequent_scores"]["HT"], "HT - Frequência ")
+                    with c2:
+                        display_scores(t_stats_a["frequent_scores"]["FT"], "FT - Frequência ")
+
+                with tab_scores3:
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        display_scores(t_combined_scores["HT"], "HT - Frequência Combinada")
+                    with c2:
+                        display_scores(t_combined_scores["FT"], "FT - Frequência Combinada")
+
+                st.info("""
+                💡 **Interpretação:**
+                - **Primeiro Gol (Individual):** Média de quando o time faz seu primeiro gol.
+                - **Primeiro Gol (Partida):** Média de quando sai o primeiro gol do jogo (qualquer time).
+                - **Cenário 0x0 HT:** Foco total no comportamento das equipes no segundo tempo quando o placar está travado.
+                """)
+            else:
+                st.warning("Dados de minutagem insuficientes para este confronto.")
 
             # GRÁFICOS DE VOLATILIDADE
             st.markdown("---")
