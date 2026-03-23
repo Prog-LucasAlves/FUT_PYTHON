@@ -67,6 +67,8 @@ def load_data():
                     "Possession_A",
                     "DangerousAttacks_H",
                     "DangerousAttacks_A",
+                    "Shots_H",
+                    "Shots_A",
                     "ShotsOnTarget_H",
                     "ShotsOnTarget_A",
                     "Corners_H",
@@ -119,6 +121,7 @@ def load_today_games():
             if df_list:
                 df = pd.concat(df_list, ignore_index=True)
                 df["Date"] = pd.to_datetime(df["Date"])
+                df = df.drop_duplicates(subset=["Date", "Home", "Away"])
                 return df
     return pd.DataFrame()
 
@@ -136,6 +139,14 @@ def format_minutes(decimal_min):
 def analyze_goal_timing(df_games, home_team, away_team):
     h_games = df_games[df_games["Home"] == home_team].copy()
     a_games = df_games[df_games["Away"] == away_team].copy()
+
+    def get_frequent_scores(games, prefix_h="Goals_H", prefix_a="Goals_A"):
+        def process_scores(df, suffix):
+            scores = df[f"{prefix_h}_{suffix}"].astype(int).astype(str) + "x" + df[f"{prefix_a}_{suffix}"].astype(int).astype(str)
+            counts = scores.value_counts(normalize=True) * 100
+            return counts.head(5).to_dict()
+
+        return {"HT": process_scores(games, "HT"), "FT": process_scores(games, "FT")}
 
     def get_timing_stats(games, is_home):
         col_mins = "Min_Goals_H" if is_home else "Min_Goals_A"
@@ -181,7 +192,14 @@ def analyze_goal_timing(df_games, home_team, away_team):
     stats_h = get_timing_stats(h_games, True)
     stats_a = get_timing_stats(a_games, False)
 
-    return stats_h, stats_a
+    # Adicionar placares frequentes
+    stats_h["frequent_scores"] = get_frequent_scores(h_games)
+    stats_a["frequent_scores"] = get_frequent_scores(a_games)
+
+    combined_games = pd.concat([h_games, a_games]).drop_duplicates(subset=["Date", "Home", "Away"])
+    stats_combined_scores = get_frequent_scores(combined_games)
+
+    return stats_h, stats_a, stats_combined_scores
 
 
 # Motor de Cálculo Estatístico PRO
@@ -212,6 +230,12 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
         avg_ppg = games[ppg_col].mean() if ppg_col and not games[ppg_col].dropna().empty else 0
         avg_da = games[da_col].mean() if da_col and not games[da_col].dropna().empty else 0
 
+        # Métrica de Chutes por Gol
+        shots_col = f"Shots_{prefix}"
+        total_shots = games[shots_col].sum() if shots_col in games.columns else 0
+        total_goals = games[col_goals].sum()
+        shots_per_goal = total_shots / total_goals if total_goals > 0 else 0
+
         return {
             "mean": mean_goals,
             "variance": variance,
@@ -223,6 +247,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
             "avg_xg": avg_xg,
             "avg_ppg": avg_ppg,
             "avg_da": avg_da,
+            "shots_per_goal": shots_per_goal,
         }
 
     stats_h = get_stats(home_h, "Goals_H_FT", "Min_Goals_H", "H")
@@ -534,11 +559,26 @@ if not df_today.empty:
                 st.write(f"Away PPG: {results['away']['avg_ppg']:.2f}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
+            # Métrica de Chutes por Gol
+            st.markdown("---")
+            st.subheader("🎯 Eficiência de Finalização (Chutes por Gol)")
+            col_sh1, col_sh2 = st.columns(2)
+            with col_sh1:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.metric(f"Chutes/Gol - {m_data['Home']}", f"{results['home']['shots_per_goal']:.1f}")
+                st.write("Média de chutes necessários para marcar 1 gol")
+                st.markdown("</div>", unsafe_allow_html=True)
+            with col_sh2:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.metric(f"Chutes/Gol - {m_data['Away']}", f"{results['away']['shots_per_goal']:.1f}")
+                st.write("Média de chutes necessários para marcar 1 gol")
+                st.markdown("</div>", unsafe_allow_html=True)
+
             # --- NOVA SEÇÃO: ANÁLISE QUANTITATIVA DE TIMING ---
             st.markdown("---")
             st.subheader("⏱️ Análise de Timing e Explosão (First Goal)")
 
-            t_stats_h, t_stats_a = analyze_goal_timing(df_hist, m_data["Home"], m_data["Away"])
+            t_stats_h, t_stats_a, t_combined_scores = analyze_goal_timing(df_hist, m_data["Home"], m_data["Away"])
 
             if t_stats_h and t_stats_a:
                 col_t1, col_t2 = st.columns(2)
@@ -580,6 +620,41 @@ if not df_today.empty:
                 # Adicionar linha de 45' para referência HT
                 fig_time.add_hline(y=45, line_dash="dash", line_color="white", annotation_text="Fim 1T")
                 st.plotly_chart(fig_time, use_container_width=True)
+
+                # Visualização de Placares Frequentes
+                st.markdown("---")
+                st.subheader("🔢 Placares Mais Frequentes (%)")
+
+                def display_scores(scores_dict, title):
+                    st.write(f"**{title}**")
+                    df_scores = pd.DataFrame(list(scores_dict.items()), columns=["Placar", "Freq %"])
+                    df_scores = df_scores.sort_values("Freq %", ascending=False)
+                    fig = px.bar(df_scores, x="Placar", y="Freq %", text_auto=".1f", color="Freq %", color_continuous_scale="Viridis", template="plotly_dark")
+                    fig.update_layout(height=300, showlegend=False)
+                    st.plotly_chart(fig, use_container_width=True, key=f"scores_{title}")
+
+                tab_scores1, tab_scores2, tab_scores3 = st.tabs([f"🏠 {m_data['Home']}", f"🚀 {m_data['Away']}", "🤝 Confronto (Ambos)"])
+
+                with tab_scores1:
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        display_scores(t_stats_h["frequent_scores"]["HT"], "HT - Frequência")
+                    with c2:
+                        display_scores(t_stats_h["frequent_scores"]["FT"], "FT - Frequência")
+
+                with tab_scores2:
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        display_scores(t_stats_a["frequent_scores"]["HT"], "HT - Frequência ")
+                    with c2:
+                        display_scores(t_stats_a["frequent_scores"]["FT"], "FT - Frequência ")
+
+                with tab_scores3:
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        display_scores(t_combined_scores["HT"], "HT - Frequência Combinada")
+                    with c2:
+                        display_scores(t_combined_scores["FT"], "FT - Frequência Combinada")
 
                 st.info("""
                 💡 **Interpretação:**
