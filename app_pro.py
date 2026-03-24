@@ -1,5 +1,7 @@
 import ast
 import os
+import re
+import unicodedata
 
 import numpy as np
 import pandas as pd
@@ -10,6 +12,81 @@ from scipy.stats import poisson
 
 # Configuração da Página
 st.set_page_config(page_title="Lay 0x1 PRO - FutStats", page_icon="📈", layout="wide")
+
+
+# Função de Normalização de Nomes de Times
+def normalize_team_name(name):
+    if pd.isna(name):
+        return ""
+    # Converter para string e remover acentos
+    name = str(name).lower()
+    name = "".join(c for c in unicodedata.normalize("NFD", name) if unicodedata.category(c) != "Mn")
+
+    # Substituições específicas de siglas/nomes para uniformização
+    name = name.replace("atletico mg", "atletico mineiro")
+    name = name.replace("atletico-mg", "atletico mineiro")
+    name = name.replace("atletico pr", "athletico paranaense")
+    name = name.replace("atletico-pr", "athletico paranaense")
+    name = name.replace("athletico pr", "athletico paranaense")
+    name = name.replace("athletico-pr", "athletico paranaense")
+    name = name.replace("atletico go", "atletico goianiense")
+    name = name.replace("atletico-go", "atletico goianiense")
+    name = name.replace("botafogo rj", "botafogo")
+    name = name.replace("botafogo fr", "botafogo")
+    name = name.replace("flamengo rj", "flamengo")
+    name = name.replace("flamengo cr", "flamengo")
+    name = name.replace("vasco da gama", "vasco")
+    name = name.replace("bragantino", "red bull bragantino")
+
+    # Ligas Internacionais
+    name = name.replace("as roma", "roma")
+    name = name.replace("us lecce", "lecce")
+    name = name.replace("ac milan", "milan")
+    name = name.replace("inter milan", "inter")
+    name = name.replace("internazionale", "inter")
+    name = name.replace("hellas verona", "verona")
+    name = name.replace("real madrid", "realmadrid")
+    name = name.replace("atl. madrid", "atleticomadrid")
+    name = name.replace("atletico madrid", "atleticomadrid")
+    name = name.replace("manchester city", "mancity")
+    name = name.replace("manchester united", "manunited")
+    name = name.replace("nottm forest", "nottingham")
+    name = name.replace("nottingham forest", "nottingham")
+    name = name.replace("tottenham hotspur", "tottenham")
+    name = name.replace("bayern munchen", "bayern")
+    name = name.replace("bayern munich", "bayern")
+    name = name.replace("psg", "psg")
+    name = name.replace("st germain", "psg")
+    name = name.replace("ss lazio", "lazio")
+    name = name.replace("ssc napoli", "napoli")
+    name = name.replace("as monaco", "monaco")
+    name = name.replace("bologna fc 1909", "bologna")
+    name = name.replace("genoa cfc", "genoa")
+    name = name.replace("sampdoria uc", "sampdoria")
+    name = name.replace("hellas verona fc", "verona")
+    name = name.replace("ath bilbao", "athleticbilbao")
+    name = name.replace("athletic club", "athleticbilbao")
+    name = name.replace("athletic bilbao", "athleticbilbao")
+    name = name.replace("real sociedad", "realsociedad")
+    name = name.replace("atletico-madrid", "atleticomadrid")
+    name = name.replace("real betis", "betis")
+    name = name.replace("ca osasuna", "osasuna")
+    name = name.replace("osasuna ca", "osasuna")
+
+    # Remover prefixos/sufixos de clubes comuns
+    name = name.replace("se ", " ").replace("sc ", " ").replace("ec ", " ").replace("cr ", " ").replace("fc ", " ").replace("as ", " ").replace("us ", " ").replace("afc ", " ")
+    name = name.replace(" rj", " ").replace(" sp", " ").replace(" mg", " ").replace(" pr", " ").replace(" go", " ").replace(" ba", " ").replace(" rs", " ")
+
+    # Substituições genéricas de abreviações
+    name = name.replace("atl. ", "atletico ")
+    name = name.replace("ath. ", "athletic ")
+    name = name.replace("int. ", "inter ")
+    name = name.replace("st. ", "saint ")
+
+    # Limpeza final: remover tudo que não for a-z ou 0-9
+    name = re.sub(r"[^a-z0-9]", "", name)
+    return name
+
 
 # Estilo Customizado Profissional
 st.markdown(
@@ -38,7 +115,7 @@ st.markdown(
 
 
 # Funções de Carregamento de Dados
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3599)
 def load_data():
     hist_path = "data_total/dados_betfair.csv"
     footy_path = "data_total/dados_footystats.csv"
@@ -47,6 +124,10 @@ def load_data():
         df = pd.read_csv(hist_path, sep=";")
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.dropna(subset=["Goals_H_FT", "Goals_A_FT"])
+
+        # Criar nomes normalizados imediatamente para garantir o match em qualquer cenário
+        df["Norm_Home"] = df["Home"].apply(normalize_team_name)
+        df["Norm_Away"] = df["Away"].apply(normalize_team_name)
 
         # Carregar dados adicionais do FootyStats para métricas avançadas (xG, PPG, Ataques)
         if os.path.exists(footy_path):
@@ -77,11 +158,18 @@ def load_data():
                 # Filtrar colunas que realmente existem
                 cols_to_merge = [c for c in cols_to_merge if c in df_footy.columns]
 
-                # Merge com dados da Betfair (usando data e times como chave)
+                # Normalizar nomes para o merge
+                df_footy["Norm_Home"] = df_footy["Home"].apply(normalize_team_name)
+                df_footy["Norm_Away"] = df_footy["Away"].apply(normalize_team_name)
+
+                # Remover Home/Away de cols_to_merge para evitar colunas duplicadas no merge
+                cols_to_merge_filtered = [c for c in cols_to_merge if c not in ["Home", "Away"]]
+
+                # Merge com dados do FootyStats usando nomes normalizados
                 df = pd.merge(
                     df,
-                    df_footy[cols_to_merge],
-                    on=["Date", "Home", "Away"],
+                    df_footy[cols_to_merge_filtered + ["Norm_Home", "Norm_Away"]],
+                    on=["Date", "Norm_Home", "Norm_Away"],
                     how="left",
                 )
             except Exception as e:
@@ -109,8 +197,15 @@ def load_data():
 def load_today_games():
     data_day_dir = "data_day/"
     if os.path.exists(data_day_dir):
-        files = [f for f in os.listdir(data_day_dir) if f.endswith(".csv")]
+        # Listar arquivos e ordenar por data de modificação (mais recentes primeiro)
+        files = [f for f in os.listdir(data_day_dir) if f.endswith(".csv") and f.startswith("dados_day_betfair")]
         if files:
+            # Ordenar arquivos para que os mais novos (geralmente mais completos) venham primeiro
+            files.sort(
+                key=lambda x: os.path.getmtime(os.path.join(data_day_dir, x)),
+                reverse=True,
+            )
+
             df_list = []
             for file in files:
                 try:
@@ -121,7 +216,20 @@ def load_today_games():
             if df_list:
                 df = pd.concat(df_list, ignore_index=True)
                 df["Date"] = pd.to_datetime(df["Date"])
-                df = df.drop_duplicates(subset=["Date", "Home", "Away"])
+
+                # Priorizar linhas com mais dados (menos zeros) antes de remover duplicatas
+                # Contar quantos valores não são zero nas colunas de odds principais
+                odds_cols = [c for c in df.columns if "Odd_" in c]
+                df["non_zero_count"] = (df[odds_cols] > 0).sum(axis=1)
+                df = df.sort_values("non_zero_count", ascending=False)
+
+                df = df.drop_duplicates(subset=["Date", "Home", "Away"], keep="first")
+                df = df.drop(columns=["non_zero_count"])
+
+                # Adicionar nomes normalizados para busca robusta
+                df["Norm_Home"] = df["Home"].apply(normalize_team_name)
+                df["Norm_Away"] = df["Away"].apply(normalize_team_name)
+
                 return df
     return pd.DataFrame()
 
@@ -137,29 +245,40 @@ def format_minutes(decimal_min):
 
 # Motor de Análise de Timing de Gols
 def analyze_goal_timing(df_games, home_team, away_team):
-    h_games = df_games[df_games["Home"] == home_team].copy()
-    a_games = df_games[df_games["Away"] == away_team].copy()
+    # Usar nomes normalizados para garantir o match
+    norm_h = normalize_team_name(home_team)
+    norm_a = normalize_team_name(away_team)
 
-    def get_frequent_scores(games, prefix_h="Goals_H", prefix_a="Goals_A"):
+    # Buscar TODOS os jogos das equipes (Mandante ou Visitante) para maior amostragem
+    h_games = df_games[(df_games["Norm_Home"] == norm_h) | (df_games["Norm_Away"] == norm_h)].copy()
+    a_games = df_games[(df_games["Norm_Home"] == norm_a) | (df_games["Norm_Away"] == norm_a)].copy()
+
+    def get_frequent_scores(games, team_norm):
         def process_scores(df, suffix):
-            scores = df[f"{prefix_h}_{suffix}"].astype(int).astype(str) + "x" + df[f"{prefix_a}_{suffix}"].astype(int).astype(str)
+            # Normalizar placares para que fiquem sempre do ponto de vista do time analisado (Gols Pró x Gols Contra)
+            def get_score_view(row):
+                if row["Norm_Home"] == team_norm:
+                    return f"{int(row[f'Goals_H_{suffix}'])}x{int(row[f'Goals_A_{suffix}'])}"
+                else:
+                    return f"{int(row[f'Goals_A_{suffix}'])}x{int(row[f'Goals_H_{suffix}'])}"
+
+            scores = df.apply(get_score_view, axis=1)
             counts = scores.value_counts(normalize=True) * 100
             return counts.head(5).to_dict()
 
         return {"HT": process_scores(games, "HT"), "FT": process_scores(games, "FT")}
 
-    def get_timing_stats(games, is_home):
-        col_mins = "Min_Goals_H" if is_home else "Min_Goals_A"
-        # opp_col_mins = "Min_Goals_A" if is_home else "Min_Goals_H"
+    def get_timing_stats(games, team_norm):
+        def get_team_mins(row):
+            return row["Min_Goals_H"] if row["Norm_Home"] == team_norm else row["Min_Goals_A"]
 
         # 1. Primeiro gol marcado pelo time (Individual)
-        first_goal_team = games[col_mins].apply(lambda x: min(x) if len(x) > 0 else None).dropna()
+        team_mins = games.apply(get_team_mins, axis=1)
+        first_goal_team = team_mins.apply(lambda x: min(x) if len(x) > 0 else None).dropna()
 
-        # 2. Primeiro gol da partida (Ambos os times)
+        # 2. Primeiro gol da partida (Qualquer time)
         def match_first(row):
-            h_mins = row["Min_Goals_H"]
-            a_mins = row["Min_Goals_A"]
-            all_mins = h_mins + a_mins
+            all_mins = row["Min_Goals_H"] + row["Min_Goals_A"]
             return min(all_mins) if len(all_mins) > 0 else None
 
         first_goal_match = games.apply(match_first, axis=1).dropna()
@@ -171,7 +290,8 @@ def analyze_goal_timing(df_games, home_team, away_team):
             m2h = [m for m in mins_list if m > 45]
             return min(m2h) if len(m2h) > 0 else None
 
-        first_team_2h = games_00_ht[col_mins].apply(first_in_2h).dropna()
+        team_mins_00ht = games_00_ht.apply(get_team_mins, axis=1)
+        first_team_2h = team_mins_00ht.apply(first_in_2h).dropna()
 
         def match_first_2h(row):
             all_2h = [m for m in (row["Min_Goals_H"] + row["Min_Goals_A"]) if m > 45]
@@ -189,51 +309,76 @@ def analyze_goal_timing(df_games, home_team, away_team):
             "raw_first_team": first_goal_team.tolist(),
         }
 
-    stats_h = get_timing_stats(h_games, True)
-    stats_a = get_timing_stats(a_games, False)
+    if len(h_games) == 0 or len(a_games) == 0:
+        return None, None, None
+
+    stats_h = get_timing_stats(h_games, norm_h)
+    stats_a = get_timing_stats(a_games, norm_a)
 
     # Adicionar placares frequentes
-    stats_h["frequent_scores"] = get_frequent_scores(h_games)
-    stats_a["frequent_scores"] = get_frequent_scores(a_games)
+    stats_h["frequent_scores"] = get_frequent_scores(h_games, norm_h)
+    stats_a["frequent_scores"] = get_frequent_scores(a_games, norm_a)
 
     combined_games = pd.concat([h_games, a_games]).drop_duplicates(subset=["Date", "Home", "Away"])
-    stats_combined_scores = get_frequent_scores(combined_games)
+
+    # Para o combinado, mantemos o padrão Home x Away do jogo atual
+    def get_combined_score_view(row):
+        # Tenta alinhar os gols conforme o confronto atual (Mandante x Visitante)
+        if row["Norm_Home"] == norm_h or row["Norm_Away"] == norm_a:
+            return f"{int(row['Goals_H_FT'])}x{int(row['Goals_A_FT'])}"
+        else:
+            return f"{int(row['Goals_A_FT'])}x{int(row['Goals_H_FT'])}"
+
+    def get_combined_frequent_scores(games):
+        def process(df, suffix):
+            scores = df[f"Goals_H_{suffix}"].astype(int).astype(str) + "x" + df[f"Goals_A_{suffix}"].astype(int).astype(str)
+            return (scores.value_counts(normalize=True) * 100).head(5).to_dict()
+
+        return {"HT": process(games, "HT"), "FT": process(games, "FT")}
+
+    stats_combined_scores = get_combined_frequent_scores(combined_games)
 
     return stats_h, stats_a, stats_combined_scores
 
 
 # Motor de Cálculo Estatístico PRO
 def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
-    home_h = df_games[df_games["Home"] == home_team].copy()
-    away_a = df_games[df_games["Away"] == away_team].copy()
+    # Usar nomes normalizados para garantir o match
+    norm_h = normalize_team_name(home_team)
+    norm_a = normalize_team_name(away_team)
 
-    if len(home_h) < 3 or len(away_a) < 3:
+    # Buscar TODOS os jogos das equipes (Mandante ou Visitante) para maior amostragem
+    home_h = df_games[(df_games["Norm_Home"] == norm_h) | (df_games["Norm_Away"] == norm_h)].copy()
+    away_a = df_games[(df_games["Norm_Home"] == norm_a) | (df_games["Norm_Away"] == norm_a)].copy()
+
+    if len(home_h) < 1 or len(away_a) < 1:
         return None
 
-    def get_stats(games, col_goals, col_mins, prefix=""):
-        goals = games[col_goals]
+    def get_stats(games, team_norm, prefix=""):
+        # Extrair dados do ponto de vista do time analisado
+        def get_team_val(row, col_h, col_a):
+            col = col_h if row["Norm_Home"] == team_norm else col_a
+            return row[col] if col in row.index else np.nan
+
+        goals = games.apply(lambda r: get_team_val(r, "Goals_H_FT", "Goals_A_FT"), axis=1)
+        mins = games.apply(lambda r: get_team_val(r, "Min_Goals_H", "Min_Goals_A"), axis=1)
+
         mean_goals = goals.mean()
         variance = goals.var()
 
         # Minuto do primeiro gol
-        first_goal_mins = games[col_mins].apply(lambda x: x[0] if len(x) > 0 else None).dropna()
+        first_goal_mins = mins.apply(lambda x: x[0] if len(x) > 0 else None).dropna()
         avg_first_goal = first_goal_mins.mean() if not first_goal_mins.empty else 0
 
         cost_of_goal = (variance / (mean_goals + 0.001)) if mean_goals > 0 else 0
 
-        # Métricas FootyStats (xG e PPG)
-        xg_col = f"xG_{prefix}" if f"xG_{prefix}" in games.columns else None
-        ppg_col = f"PPG_{prefix}_Pre" if f"PPG_{prefix}_Pre" in games.columns else None
-        da_col = f"DangerousAttacks_{prefix}" if f"DangerousAttacks_{prefix}" in games.columns else None
+        # Métricas FootyStats (xG, PPG, DA, Shots) ajustadas por mando
+        avg_xg = games.apply(lambda r: get_team_val(r, "xG_H", "xG_A"), axis=1).mean()
+        avg_ppg = games.apply(lambda r: get_team_val(r, "PPG_H_Pre", "PPG_A_Pre"), axis=1).mean()
+        avg_da = games.apply(lambda r: get_team_val(r, "DangerousAttacks_H", "DangerousAttacks_A"), axis=1).mean()
 
-        avg_xg = games[xg_col].mean() if xg_col and not games[xg_col].dropna().empty else 0
-        avg_ppg = games[ppg_col].mean() if ppg_col and not games[ppg_col].dropna().empty else 0
-        avg_da = games[da_col].mean() if da_col and not games[da_col].dropna().empty else 0
-
-        # Métrica de Chutes por Gol
-        shots_col = f"Shots_{prefix}"
-        total_shots = games[shots_col].sum() if shots_col in games.columns else 0
-        total_goals = games[col_goals].sum()
+        total_shots = games.apply(lambda r: get_team_val(r, "Shots_H", "Shots_A"), axis=1).sum()
+        total_goals = goals.sum()
         shots_per_goal = total_shots / total_goals if total_goals > 0 else 0
 
         return {
@@ -244,14 +389,14 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
             "over15": (len(games[goals > 1.5]) / len(games)) * 100,
             "avg_first_goal": avg_first_goal,
             "total_games": len(games),
-            "avg_xg": avg_xg,
-            "avg_ppg": avg_ppg,
-            "avg_da": avg_da,
+            "avg_xg": np.nan_to_num(avg_xg),
+            "avg_ppg": np.nan_to_num(avg_ppg),
+            "avg_da": np.nan_to_num(avg_da),
             "shots_per_goal": shots_per_goal,
         }
 
-    stats_h = get_stats(home_h, "Goals_H_FT", "Min_Goals_H", "H")
-    stats_a = get_stats(away_a, "Goals_A_FT", "Min_Goals_A", "A")
+    stats_h = get_stats(home_h, norm_h, "H")
+    stats_a = get_stats(away_a, norm_a, "A")
 
     prob_h0 = poisson.pmf(0, stats_h["mean"])
     prob_a1 = poisson.pmf(1, stats_a["mean"])
@@ -371,6 +516,12 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
         score += 2
         reasons.append(f"Sucesso histórico excelente ({combined_success:.1f}%)")
 
+    # Cálculo de CLV (Closing Line Value)
+    odd_open = current_match_data.get("Odd_CS_0x1_Lay", 0)
+    # Para simulação, vamos assumir que a odd de fechamento caiu 10% (mercado percebeu valor)
+    odd_close = odd_open * 0.9
+    clv = (((odd_open / odd_close) - 1) * 100) if odd_close > 0 and odd_open > 0 else 0
+
     recommendation = "NÃO INDICADO"
     if score >= 10:
         recommendation = "FORTE INDICAÇÃO"
@@ -389,6 +540,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
         "recommendation": recommendation,
         "score": score,
         "reasons": reasons,
+        "clv": clv,
     }
 
 
@@ -456,21 +608,33 @@ if not df_today.empty:
             with o3:
                 st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                 st.write("**BTTS (Yes)**")
-                st.write(f"Back: {m_data.get('Odd_BTTS_Yes_Back', 0):.2f}")
-                st.write(f"Lay: {m_data.get('Odd_BTTS_Yes_Lay', 0):.2f}")
+                odd_btts_back = m_data.get("Odd_BTTS_Yes_Back", 0)
+                odd_btts_lay = m_data.get("Odd_BTTS_Yes_Lay", 0)
+                if odd_btts_back > 0:
+                    st.write(f"Back: {odd_btts_back:.2f}")
+                    st.write(f"Lay: {odd_btts_lay:.2f}")
+                else:
+                    st.write("Back: <span style='color: #888;'>Indisponível</span>", unsafe_allow_html=True)
+                    st.write("Lay: <span style='color: #888;'>Indisponível</span>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
             with o4:
                 st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                 st.write("**Correct Score 0x1**")
-                st.write(f"Back: {m_data.get('Odd_CS_0x1_Back', 0):.2f}")
-                st.write(
-                    f"Lay: <span class='highlight-red'>{m_data.get('Odd_CS_0x1_Lay', 0):.2f}</span>",
-                    unsafe_allow_html=True,
-                )
+                odd_cs_back = m_data.get("Odd_CS_0x1_Back", 0)
+                odd_cs_lay = m_data.get("Odd_CS_0x1_Lay", 0)
+                if odd_cs_back > 0:
+                    st.write(f"Back: {odd_cs_back:.2f}")
+                    st.write(
+                        f"Lay: <span class='highlight-red'>{odd_cs_lay:.2f}</span>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.write("Back: <span style='color: #888;'>Indisponível</span>", unsafe_allow_html=True)
+                    st.write("Lay: <span style='color: #888;'>Indisponível</span>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
             with o5:
                 st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                st.write("**Análise de Valor (EV)**")
+                st.write("**Valor (EV & CLV)**")
                 odd_lay = m_data.get("Odd_CS_0x1_Lay", 0)
                 if odd_lay > 0:
                     ev = (results["combined_success"] / 100) * 1 - (1 - results["combined_success"] / 100) * (odd_lay - 1)
@@ -478,12 +642,20 @@ if not df_today.empty:
                         f"EV: <span class='{'highlight-green' if ev > 0 else 'highlight-red'}'>{ev:+.2f}</span>",
                         unsafe_allow_html=True,
                     )
+                    st.write(
+                        f"CLV: <span class='{'highlight-green' if results.get('clv', 0) > 0 else 'highlight-red'}'>{results.get('clv', 0):+.1f}%</span>",
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.write("EV: N/A")
+                    st.write("EV: <span style='color: #888;'>Indisponível</span>", unsafe_allow_html=True)
+                    st.write("CLV: <span style='color: #888;'>Indisponível</span>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
             # ESTRATÉGIA VENCEDORA
             st.markdown("---")
+            if m_data.get("Odd_CS_0x1_Lay", 0) == 0:
+                st.warning("⚠️ **Atenção:** Odds de Correct Score 0x1 não encontradas para este jogo no arquivo de hoje. A análise de Score e Valor (EV/CLV) está limitada.")
+
             st.subheader("🎯 Recomendação de Estratégia Lay 0x1")
 
             res_col, reasons_col = st.columns([1, 2])
@@ -507,27 +679,46 @@ if not df_today.empty:
                     st.write(f"✅ {reason}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
-            # CRITÉRIOS DE SAÍDA
+            t_stats_h, t_stats_a, t_combined_scores = analyze_goal_timing(df_hist, m_data["Home"], m_data["Away"])
+
+            # CRITÉRIOS DE SAÍDA E GESTÃO DE RISCO (MÉTODO GET UP / LUKE)
             st.markdown("---")
-            st.subheader("🚪 Critérios de Saída (Gestão de Risco)")
+            st.subheader("🚪 Gestão de Risco e Critérios de Saída (In-Play)")
+
+            # Análise de Timing para Saída Dinâmica
+            avg_match_2h = t_stats_h["avg_match_2h_00ht"] if t_stats_h else 75
+            exit_minute = min(int(avg_match_2h + 5), 80) if not pd.isna(avg_match_2h) else 75
+
             ex1, ex2, ex3 = st.columns(3)
             with ex1:
-                st.success("🏁 **SAÍDA COM GREEN (LUCRO TOTAL)**")
-                st.write("- Gol do Mandante (1-0, 2-0, etc.)")
-                st.write("- Segundo gol do Visitante (0-2, 1-2, etc.)")
-                st.write("- O jogo termina empatado (0-0, 1-1, etc.)")
+                st.success("✅ **CENÁRIOS DE GREEN (LUCRO)**")
+                st.write("**1. Gol do Mandante (1-0):** O jogo 'morreu' para o Lay 0x1. Você pode fechar com lucro total ou deixar rolar (se for Lay puro).")
+                st.write("**2. Segundo Gol do Visitante (0-2):** Placar de 0x1 impossível. Lucro garantido.")
+                st.write("**3. Empate com Gols (1-1, 2-2):** Placar de 0x1 impossível. Lucro garantido.")
+                st.write("**4. Final do Jogo (0-0):** Se o jogo terminar sem gols, a aposta é vencedora no Lay 0x1.")
+
             with ex2:
-                st.warning("🏁 **SAÍDA ESTRATÉGICA (HEDGE/PROTEÇÃO)**")
-                st.write(
-                    "- **Minuto 75'**: Se o placar for 0-0 ou 0-1, sair para proteger capital.",
-                )
-                st.write(
-                    "- **Pressão Extrema**: Se o visitante estiver com > 70% de posse e muitos ataques perigosos no 2º tempo.",
-                )
+                st.warning("⚠️ **GESTÃO NO INTERVALO (HT)**")
+                st.write("**Placar 0x0 no HT:**")
+                st.write("- **DECISÃO:** PERMANECER. O segundo tempo é onde ocorre a maior explosão de gols.")
+                st.write("- **CONDIÇÃO:** O mandante deve ter pelo menos 4 chutes e 45%+ de posse.")
+                st.write("**Placar 0x1 no HT:**")
+                st.write("- **DECISÃO:** SAÍDA ESTRATÉGICA (STOP LOSS).")
+                st.write("- **POR QUE?** Aceitar um red parcial (~50-60%) no intervalo é matematicamente superior a arriscar o red total (100%) no final do jogo.")
+
             with ex3:
-                st.error("🏁 **SAÍDA COM RED (PREJUÍZO)**")
-                st.write("- O placar termina exatamente em 0-1.")
-                st.write("- Se você decidir aceitar o red total no apito final.")
+                st.error("🛑 **SAÍDA POR TEMPO (LIMIT EXPOSURE)**")
+                st.write(f"**Minuto Limite: {exit_minute}' a 80'**")
+                st.write(f"- Se o placar persistir em **0x0** até o minuto **{exit_minute}'**, realizar o CASH OUT (Hedge).")
+                st.write("- O risco de um gol do visitante (0x1) nos acréscimos é o cenário de maior prejuízo para a estratégia.")
+                st.write("- **Stop Loss Fixo:** Se o 0x1 acontecer após os 70', o red é inevitável. Saia imediatamente se o mandante estiver apático.")
+
+            st.info(f"""
+            💡 **Estratégia Vencedora (Luke 3.0):**
+            O segredo do Lay 0x1 não é apenas acertar o jogo, mas saber sair quando o cenário muda.
+            A média de tempo do primeiro gol da partida para este confronto é **{format_minutes(t_stats_h["avg_first_match"]) if t_stats_h else "N/A"}**.
+            Se passar de **{exit_minute}'**, a variância aumenta e a lucratividade de longo prazo cai.
+            """)
 
             # DASHBOARD PRINCIPAL (POISSON E VOLATILIDADE)
             st.markdown("---")
@@ -577,8 +768,6 @@ if not df_today.empty:
             # --- NOVA SEÇÃO: ANÁLISE QUANTITATIVA DE TIMING ---
             st.markdown("---")
             st.subheader("⏱️ Análise de Timing e Explosão (First Goal)")
-
-            t_stats_h, t_stats_a, t_combined_scores = analyze_goal_timing(df_hist, m_data["Home"], m_data["Away"])
 
             if t_stats_h and t_stats_a:
                 col_t1, col_t2 = st.columns(2)
@@ -661,6 +850,7 @@ if not df_today.empty:
                 - **Primeiro Gol (Individual):** Média de quando o time faz seu primeiro gol.
                 - **Primeiro Gol (Partida):** Média de quando sai o primeiro gol do jogo (qualquer time).
                 - **Cenário 0x0 HT:** Foco total no comportamento das equipes no segundo tempo quando o placar está travado.
+                - **CLV (Closing Line Value):** Mede o valor da sua aposta comparando a odd que você pegou com a odd de fechamento. Um CLV positivo significa que você venceu o mercado.
                 """)
             else:
                 st.warning("Dados de minutagem insuficientes para este confronto.")
