@@ -18,7 +18,7 @@ repos:
         types_or: [python, pyi]
         args: [
           --fix,
-          --line-length=200,
+          --line-length=400,
           --ignore=E722,
           --ignore=E701,
           --extend-select=I,
@@ -26,7 +26,7 @@ repos:
 
       - id: ruff-format
         types_or: [python, pyi]
-        args: [--line-length=200]
+        args: [--line-length=400]
 -   repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1
     hooks:
