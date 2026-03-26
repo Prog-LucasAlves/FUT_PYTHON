@@ -13,6 +13,8 @@ from scipy.stats import poisson
 # Configuração da Página
 st.set_page_config(page_title="Lay 0x2 PRO - FutStats", page_icon="📈", layout="wide")
 
+CACHE_VERSION = "2026-03-26-team-aliases-v10"
+
 
 # Função de Normalização de Nomes de Times
 def normalize_team_name(name):
@@ -50,6 +52,17 @@ def normalize_team_name(name):
     name = name.replace("atletico madrid", "atleticomadrid")
     name = name.replace("manchester city", "mancity")
     name = name.replace("manchester united", "manunited")
+    name = name.replace("west ham united", "westham")
+    name = name.replace("west ham", "westham")
+    name = name.replace("newcastle united", "newcastle")
+    name = name.replace("leeds united", "leeds")
+    name = name.replace("leicester city", "leicester")
+    name = name.replace("norwich city", "norwich")
+    name = name.replace("ipswich town", "ipswich")
+    name = name.replace("wolverhampton wanderers", "wolverhampton")
+    name = name.replace("wolves", "wolverhampton")
+    name = name.replace("west bromwich albion", "westbrom")
+    name = name.replace("west brom", "westbrom")
     name = name.replace("nottm forest", "nottingham")
     name = name.replace("nottingham forest", "nottingham")
     name = name.replace("tottenham hotspur", "tottenham")
@@ -67,14 +80,65 @@ def normalize_team_name(name):
     name = name.replace("ath bilbao", "athleticbilbao")
     name = name.replace("athletic club", "athleticbilbao")
     name = name.replace("athletic bilbao", "athleticbilbao")
+    name = name.replace("athletic club bilbao", "athleticbilbao")
     name = name.replace("real sociedad", "realsociedad")
     name = name.replace("atletico-madrid", "atleticomadrid")
+    name = name.replace("atletico de madrid", "atleticomadrid")
+    name = name.replace("fc barcelona", "barcelona")
+    name = name.replace("barcelona fc", "barcelona")
+    name = name.replace("rcd espanyol", "espanyol")
+    name = name.replace("espanyol barcelona", "espanyol")
+    name = name.replace("reial club deportiu espanyol", "espanyol")
+    name = name.replace("olympique de marseille", "marseille")
+    name = name.replace("olympique marseille", "marseille")
+    name = name.replace("lille osc metropole", "lille")
+    name = name.replace("lille osc", "lille")
+    name = name.replace("olympique lyonnais", "lyon")
+    name = name.replace("paris saint germain", "psg")
+    name = name.replace("paris saint-germain", "psg")
+    name = name.replace("ogc nice cote dazur", "nice")
+    name = name.replace("ogc nice", "nice")
+    name = name.replace("rc strasbourg alsace", "strasbourg")
+    name = name.replace("stade rennais", "rennes")
+    name = name.replace("stade rennais fc", "rennes")
+    name = name.replace("stade brestois 29", "brest")
+    name = name.replace("angers sco", "angers")
+    name = name.replace("angers sporting club de louest", "angers")
+    name = name.replace("le havre ac", "lehavre")
+    name = name.replace("le havre", "lehavre")
+    name = name.replace("association jeunesse auxerroise", "auxerre")
+    name = name.replace("aj auxerre", "auxerre")
+    name = name.replace("paris fc", "parisfc")
+    name = name.replace("gd estoril praia", "estoril")
+    name = name.replace("estoril praia", "estoril")
+    name = name.replace("rio ave fc", "rioave")
+    name = name.replace("rio ave", "rioave")
+    name = name.replace("sporting lisbon", "sportingcp")
+    name = name.replace("sporting cp", "sportingcp")
+    name = name.replace("vitoria guimaraes", "vitoriaguimaraes")
+    name = name.replace("vitoria de guimaraes", "vitoriaguimaraes")
+    name = name.replace("vitoria sc guimaraes", "vitoriaguimaraes")
+    name = name.replace("vitoria sc", "vitoriaguimaraes")
+    name = name.replace("guimaraes", "vitoriaguimaraes")
+    name = name.replace("sevilla fc", "sevilla")
+    name = name.replace("valencia cf", "valencia")
+    name = name.replace("villarreal cf", "villarreal")
+    name = name.replace("getafe cf", "getafe")
+    name = name.replace("granada cf", "granada")
+    name = name.replace("rayo vallecano", "rayovallecano")
+    name = name.replace("deportivo alaves", "alaves")
+    name = name.replace("rcd mallorca", "mallorca")
+    name = name.replace("real mallorca", "mallorca")
+    name = name.replace("real club deportivo mallorca", "mallorca")
+    name = name.replace("celta de vigo", "celta")
+    name = name.replace("real club celta de vigo", "celta")
     name = name.replace("real betis", "betis")
     name = name.replace("ca osasuna", "osasuna")
     name = name.replace("osasuna ca", "osasuna")
 
     # Remover prefixos/sufixos de clubes comuns
-    name = name.replace("se ", " ").replace("sc ", " ").replace("ec ", " ").replace("cr ", " ").replace("fc ", " ").replace("as ", " ").replace("us ", " ").replace("afc ", " ")
+    name = name.replace("se ", " ").replace("sc ", " ").replace("ec ", " ").replace("cr ", " ").replace("fc ", " ").replace("as ", " ").replace("us ", " ").replace("afc ", " ").replace("rcd ", " ").replace("rc ", " ").replace("cf ", " ").replace("cd ", " ")
+    name = name.replace(" fc", " ").replace(" cf", " ").replace(" afc", " ").replace(" cfc", " ").replace(" sc", " ").replace(" ac", " ").replace(" ud", " ")
     name = name.replace(" rj", " ").replace(" sp", " ").replace(" mg", " ").replace(" pr", " ").replace(" go", " ").replace(" ba", " ").replace(" rs", " ")
 
     # Substituições genéricas de abreviações
@@ -119,7 +183,7 @@ st.markdown(
 
 # Funções de Carregamento de Dados
 @st.cache_data(ttl=3599)
-def load_data():
+def load_data(_cache_version=CACHE_VERSION):
     hist_path = "data_total/dados_betfair.csv"
     footy_path = "data_total/dados_footystats.csv"
 
@@ -197,7 +261,7 @@ def load_data():
 
 
 @st.cache_data(ttl=600)
-def load_today_games():
+def load_today_games(_cache_version=CACHE_VERSION):
     data_day_dir = "data_day/"
     if os.path.exists(data_day_dir):
         # Listar arquivos e ordenar por data de modificação (mais recentes primeiro)
@@ -244,6 +308,66 @@ def format_minutes(decimal_min):
     minutes = int(decimal_min)
     seconds = int((decimal_min - minutes) * 60)
     return f"{minutes}'{seconds:02d}\""
+
+
+def get_last_10_team_summary(df_games, team_name, target_score):
+    team_norm = normalize_team_name(team_name)
+    team_games = df_games[(df_games["Norm_Home"] == team_norm) | (df_games["Norm_Away"] == team_norm)].copy()
+    if team_games.empty:
+        return {
+            "form_sequence": "Sem jogos",
+            "record": "0V 0E 0D",
+            "points": 0,
+            "max_points": 0,
+            "win_rate": 0.0,
+            "target_score_count": 0,
+            "games_analyzed": 0,
+        }
+
+    team_games = team_games.sort_values("Date", ascending=False).head(10).copy()
+
+    def summarize_match(row):
+        if row["Norm_Home"] == team_norm:
+            goals_for = int(row["Goals_H_FT"])
+            goals_against = int(row["Goals_A_FT"])
+        else:
+            goals_for = int(row["Goals_A_FT"])
+            goals_against = int(row["Goals_H_FT"])
+
+        if goals_for > goals_against:
+            result = "V"
+            points = 3
+        elif goals_for == goals_against:
+            result = "E"
+            points = 1
+        else:
+            result = "D"
+            points = 0
+
+        return goals_for, goals_against, result, points
+
+    summaries = team_games.apply(summarize_match, axis=1)
+    goals_for = summaries.apply(lambda x: x[0])
+    goals_against = summaries.apply(lambda x: x[1])
+    results = summaries.apply(lambda x: x[2])
+    points = summaries.apply(lambda x: x[3])
+
+    wins = int((results == "V").sum())
+    draws = int((results == "E").sum())
+    losses = int((results == "D").sum())
+    total_points = int(points.sum())
+    total_games = len(team_games)
+    max_points = total_games * 3
+
+    return {
+        "form_sequence": " | ".join(results.tolist()),
+        "record": f"{wins}V {draws}E {losses}D",
+        "points": total_points,
+        "max_points": max_points,
+        "win_rate": (wins / total_games) * 100 if total_games > 0 else 0.0,
+        "target_score_count": int(((goals_for == target_score[0]) & (goals_against == target_score[1])).sum()),
+        "games_analyzed": total_games,
+    }
 
 
 # Motor de Análise de Timing de Gols
@@ -363,6 +487,9 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
             col = col_h if row["Norm_Home"] == team_norm else col_a
             return row[col] if col in row.index else np.nan
 
+        def get_team_series(col_h, col_a):
+            return games.apply(lambda r: get_team_val(r, col_h, col_a), axis=1)
+
         goals = games.apply(lambda r: get_team_val(r, "Goals_H_FT", "Goals_A_FT"), axis=1)
         mins = games.apply(lambda r: get_team_val(r, "Min_Goals_H", "Min_Goals_A"), axis=1)
 
@@ -380,9 +507,24 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
         avg_ppg = games.apply(lambda r: get_team_val(r, "PPG_H_Pre", "PPG_A_Pre"), axis=1).mean()
         avg_da = games.apply(lambda r: get_team_val(r, "DangerousAttacks_H", "DangerousAttacks_A"), axis=1).mean()
 
-        total_shots = games.apply(lambda r: get_team_val(r, "Shots_H", "Shots_A"), axis=1).sum()
+        shots_on_target = pd.to_numeric(get_team_series("ShotsOnTarget_H", "ShotsOnTarget_A"), errors="coerce")
+        total_shots = pd.to_numeric(get_team_series("Shots_H", "Shots_A"), errors="coerce")
         total_goals = goals.sum()
-        shots_per_goal = total_shots / total_goals if total_goals > 0 else 0
+        valid_sot = shots_on_target.dropna()
+        valid_total_shots = total_shots.dropna()
+
+        if not valid_sot.empty and valid_sot.sum() > 0:
+            finishing_value = valid_sot.sum() / total_goals if total_goals > 0 else np.nan
+            finishing_label = "Chutes no Gol/Gol"
+            finishing_desc = "Média de chutes no gol necessários para marcar 1 gol"
+        elif not valid_total_shots.empty and valid_total_shots.sum() > 0:
+            finishing_value = valid_total_shots.sum() / total_goals if total_goals > 0 else np.nan
+            finishing_label = "Chutes/Gol"
+            finishing_desc = "Média de chutes necessários para marcar 1 gol"
+        else:
+            finishing_value = np.nan
+            finishing_label = "Chutes no Gol/Gol"
+            finishing_desc = "Dados de finalização indisponíveis no histórico"
 
         return {
             "mean": mean_goals,
@@ -395,11 +537,46 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
             "avg_xg": np.nan_to_num(avg_xg),
             "avg_ppg": np.nan_to_num(avg_ppg),
             "avg_da": np.nan_to_num(avg_da),
-            "shots_per_goal": shots_per_goal,
+            "shots_per_goal": finishing_value,
+            "shots_per_goal_label": finishing_label,
+            "shots_per_goal_desc": finishing_desc,
         }
+
+    def capped_score(value, max_value, invert=False, default=50):
+        if pd.isna(value):
+            return default
+        score = max(0, min((float(value) / max_value) * 100, 100))
+        return 100 - score if invert else score
+
+    def calculate_lay_strength_index(stats):
+        shots_value = stats["shots_per_goal"]
+        finishing_score = 100 - min((shots_value / 6) * 100, 100) if pd.notna(shots_value) else 50
+        components = {
+            "xg": capped_score(stats["avg_xg"], 2.5),
+            "da": capped_score(stats["avg_da"], 80),
+            "zero_avoid": max(0, 100 - stats["zeros"]),
+            "over15": max(0, min(stats["over15"], 100)),
+            "variance": capped_score(stats["variance"], 2.0),
+            "finishing": finishing_score,
+        }
+        index = components["xg"] * 0.25 + components["zero_avoid"] * 0.20 + components["variance"] * 0.20 + components["over15"] * 0.15 + components["da"] * 0.10 + components["finishing"] * 0.10
+        return round(index, 1)
+
+    def classify_strength(index):
+        if index >= 75:
+            return "Elite"
+        if index >= 60:
+            return "Forte"
+        if index >= 45:
+            return "Moderado"
+        return "Baixo"
 
     stats_h = get_stats(home_h, norm_h, "H")
     stats_a = get_stats(away_a, norm_a, "A")
+    last10_home = get_last_10_team_summary(df_games, home_team, (0, 2))
+    last10_away = get_last_10_team_summary(df_games, away_team, (0, 2))
+    lay02_index_home = calculate_lay_strength_index(stats_h)
+    lay02_index_away = calculate_lay_strength_index(stats_a)
 
     prob_h0 = poisson.pmf(0, stats_h["mean"])
     prob_a2 = poisson.pmf(2, stats_a["mean"])
@@ -534,6 +711,12 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
     return {
         "home": stats_h,
         "away": stats_a,
+        "last10_home": last10_home,
+        "last10_away": last10_away,
+        "lay_strength_home": lay02_index_home,
+        "lay_strength_away": lay02_index_away,
+        "lay_strength_home_label": classify_strength(lay02_index_home),
+        "lay_strength_away_label": classify_strength(lay02_index_away),
         "poisson_0x2": poisson_0x2,
         "combined_success": combined_success,
         "h_games": home_h,
@@ -755,19 +938,67 @@ if not df_today.empty:
                 st.write(f"Away PPG: {results['away']['avg_ppg']:.2f}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
+            st.markdown("---")
+            st.subheader("🧠 Índice de Força FootyStats - Lay 0x2")
+            s1, s2 = st.columns(2)
+            with s1:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.metric(f"Índice Anti-0x2 - {m_data['Home']}", f"{results['lay_strength_home']:.1f}")
+                st.write(f"Classificação: {results['lay_strength_home_label']}")
+                st.caption("Elite/Forte: perfil muito favorável ao Lay 0x2 | Moderado: exige confirmação | Baixo: maior chance de jogo travado.")
+                st.write("Foco em evitar zero gol, reagir ao jogo e aumentar a instabilidade do placar exato.")
+                st.markdown("</div>", unsafe_allow_html=True)
+            with s2:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.metric(f"Índice Anti-0x2 - {m_data['Away']}", f"{results['lay_strength_away']:.1f}")
+                st.write(f"Classificação: {results['lay_strength_away_label']}")
+                st.caption("Elite/Forte: perfil muito favorável ao Lay 0x2 | Moderado: exige confirmação | Baixo: maior chance de jogo travado.")
+                st.write("Leitura da capacidade do visitante gerar um jogo mais volátil e menos preso ao 0x2.")
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("---")
+            st.subheader("🔥 Performance nos Últimos 10 Jogos")
+            p1, p2 = st.columns(2)
+            with p1:
+                last10 = results["last10_home"]
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.write(f"**{m_data['Home']}**")
+                st.write(f"Forma: {last10['form_sequence']}")
+                st.write(f"Campanha: {last10['record']}")
+                st.write(f"Pontos: {last10['points']}/{last10['max_points']} | Win Rate: {last10['win_rate']:.1f}%")
+                st.write(f"Placares 0x2: {last10['target_score_count']} em {last10['games_analyzed']} jogos")
+                st.markdown("</div>", unsafe_allow_html=True)
+            with p2:
+                last10 = results["last10_away"]
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.write(f"**{m_data['Away']}**")
+                st.write(f"Forma: {last10['form_sequence']}")
+                st.write(f"Campanha: {last10['record']}")
+                st.write(f"Pontos: {last10['points']}/{last10['max_points']} | Win Rate: {last10['win_rate']:.1f}%")
+                st.write(f"Placares 0x2: {last10['target_score_count']} em {last10['games_analyzed']} jogos")
+                st.markdown("</div>", unsafe_allow_html=True)
+
             # Métrica de Chutes por Gol
             st.markdown("---")
             st.subheader("🎯 Eficiência de Finalização (Chutes por Gol)")
             col_sh1, col_sh2 = st.columns(2)
             with col_sh1:
                 st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                st.metric(f"Chutes/Gol - {m_data['Home']}", f"{results['home']['shots_per_goal']:.1f}")
-                st.write("Média de chutes necessários para marcar 1 gol")
+                home_shots_value = results["home"]["shots_per_goal"]
+                st.metric(
+                    f"{results['home']['shots_per_goal_label']} - {m_data['Home']}",
+                    f"{home_shots_value:.1f}" if pd.notna(home_shots_value) else "N/D",
+                )
+                st.write(results["home"]["shots_per_goal_desc"])
                 st.markdown("</div>", unsafe_allow_html=True)
             with col_sh2:
                 st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                st.metric(f"Chutes/Gol - {m_data['Away']}", f"{results['away']['shots_per_goal']:.1f}")
-                st.write("Média de chutes necessários para marcar 1 gol")
+                away_shots_value = results["away"]["shots_per_goal"]
+                st.metric(
+                    f"{results['away']['shots_per_goal_label']} - {m_data['Away']}",
+                    f"{away_shots_value:.1f}" if pd.notna(away_shots_value) else "N/D",
+                )
+                st.write(results["away"]["shots_per_goal_desc"])
                 st.markdown("</div>", unsafe_allow_html=True)
 
             # --- NOVA SEÇÃO: ANÁLISE QUANTITATIVA DE TIMING ---
