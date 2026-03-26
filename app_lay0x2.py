@@ -78,10 +78,13 @@ def normalize_team_name(name):
     name = name.replace(" rj", " ").replace(" sp", " ").replace(" mg", " ").replace(" pr", " ").replace(" go", " ").replace(" ba", " ").replace(" rs", " ")
 
     # Substituições genéricas de abreviações
-    name = name.replace("atl. ", "atletico ")
-    name = name.replace("ath. ", "athletic ")
-    name = name.replace("int. ", "inter ")
-    name = name.replace("st. ", "saint ")
+    name = name.replace("atl. ", "atletico ").replace("atl ", "atletico ")
+    name = name.replace("ath. ", "athletic ").replace("ath ", "athletic ")
+    name = name.replace("int. ", "inter ").replace("int ", "inter ")
+    name = name.replace("st. ", "saint ").replace("st ", "saint ")
+    name = name.replace("man city", "mancity")
+    name = name.replace("man utd", "manunited")
+    name = name.replace("utd", "united")
 
     # Limpeza final: remover tudo que não for a-z ou 0-9
     name = re.sub(r"[^a-z0-9]", "", name)
