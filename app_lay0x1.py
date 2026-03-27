@@ -359,6 +359,36 @@ def get_last_10_team_summary(df_games, team_name, target_score):
     total_games = len(team_games)
     max_points = total_games * 3
 
+    def build_ht_scenario_summary(df, ht_score):
+        scenario_games = df[(df["Goals_H_HT"] == ht_score[0]) & (df["Goals_A_HT"] == ht_score[1])].copy()
+        if scenario_games.empty:
+            return {
+                "total": 0,
+                "home_goal_to_75": 0,
+                "away_goal_to_75": 0,
+                "stayed_score_to_75": 0,
+                "changed_score_to_75": 0,
+            }
+
+        def score_until_75(row):
+            home_75 = count_goals_until(row["Min_Goals_H"], 75)
+            away_75 = count_goals_until(row["Min_Goals_A"], 75)
+            return home_75, away_75
+
+        scores_75 = scenario_games.apply(score_until_75, axis=1)
+        home_scores_75 = scores_75.apply(lambda x: x[0])
+        away_scores_75 = scores_75.apply(lambda x: x[1])
+
+        stayed_mask = (home_scores_75 == ht_score[0]) & (away_scores_75 == ht_score[1])
+
+        return {
+            "total": int(len(scenario_games)),
+            "home_goal_to_75": int((home_scores_75 > ht_score[0]).sum()),
+            "away_goal_to_75": int((away_scores_75 > ht_score[1]).sum()),
+            "stayed_score_to_75": int(stayed_mask.sum()),
+            "changed_score_to_75": int((~stayed_mask).sum()),
+        }
+
     return {
         "form_sequence": " | ".join(results.tolist()),
         "record": f"{wins}V {draws}E {losses}D",
@@ -367,6 +397,98 @@ def get_last_10_team_summary(df_games, team_name, target_score):
         "win_rate": (wins / total_games) * 100 if total_games > 0 else 0.0,
         "target_score_count": int(((goals_for == target_score[0]) & (goals_against == target_score[1])).sum()),
         "games_analyzed": total_games,
+        "ht_00": build_ht_scenario_summary(team_games, (0, 0)),
+        "ht_01": build_ht_scenario_summary(team_games, (0, 1)),
+    }
+
+
+def normalize_goal_minute(minute):
+    if pd.isna(minute):
+        return None
+    if isinstance(minute, (int, float)):
+        return float(minute)
+
+    minute_str = str(minute).strip().replace("'", "")
+    if not minute_str:
+        return None
+
+    try:
+        if "+" in minute_str:
+            base, extra = minute_str.split("+", 1)
+            return float(base) + float(extra)
+        return float(minute_str)
+    except:
+        return None
+
+
+def count_goals_until(mins_list, minute_limit):
+    valid_minutes = [m for m in (normalize_goal_minute(m) for m in mins_list) if m is not None]
+    return sum(1 for m in valid_minutes if m <= minute_limit)
+
+
+def count_goals_after(mins_list, minute_limit):
+    valid_minutes = [m for m in (normalize_goal_minute(m) for m in mins_list) if m is not None]
+    return sum(1 for m in valid_minutes if m > minute_limit)
+
+
+def build_poisson_timing_scenario(df_games, team_name, role, scenario_score, cutoff_minute=75, end_minute=90):
+    team_norm = normalize_team_name(team_name)
+    role_col = "Norm_Home" if role == "home" else "Norm_Away"
+    team_games = df_games[df_games[role_col] == team_norm].copy()
+
+    if team_games.empty:
+        return None
+
+    selected_games = []
+    for _, row in team_games.iterrows():
+        score_at_cutoff = (
+            count_goals_until(row["Min_Goals_H"], cutoff_minute),
+            count_goals_until(row["Min_Goals_A"], cutoff_minute),
+        )
+        if score_at_cutoff == scenario_score:
+            selected_games.append(row)
+
+    if not selected_games:
+        return None
+
+    scenario_df = pd.DataFrame(selected_games)
+    future_home_goals = scenario_df["Min_Goals_H"].apply(lambda mins: count_goals_after(mins, cutoff_minute))
+    future_away_goals = scenario_df["Min_Goals_A"].apply(lambda mins: count_goals_after(mins, cutoff_minute))
+    future_total_goals = future_home_goals + future_away_goals
+
+    lambda_home = future_home_goals.mean()
+    lambda_away = future_away_goals.mean()
+    lambda_total = future_total_goals.mean()
+
+    minute_axis = list(range(cutoff_minute + 1, end_minute + 1))
+    remaining_window = max(end_minute - cutoff_minute, 1)
+
+    timeline = []
+    for minute in minute_axis:
+        elapsed = minute - cutoff_minute
+        fraction = elapsed / remaining_window
+        mu_home = lambda_home * fraction
+        mu_away = lambda_away * fraction
+        mu_total = lambda_total * fraction
+        timeline.append(
+            {
+                "Minute": minute,
+                "Home": (1 - poisson.pmf(0, mu_home)) * 100,
+                "Away": (1 - poisson.pmf(0, mu_away)) * 100,
+                "Match": (1 - poisson.pmf(0, mu_total)) * 100,
+            },
+        )
+
+    return {
+        "sample_size": len(scenario_df),
+        "lambda_home": lambda_home,
+        "lambda_away": lambda_away,
+        "lambda_total": lambda_total,
+        "prob_home_goal": (1 - poisson.pmf(0, lambda_home)) * 100,
+        "prob_away_goal": (1 - poisson.pmf(0, lambda_away)) * 100,
+        "prob_match_goal": (1 - poisson.pmf(0, lambda_total)) * 100,
+        "timeline": pd.DataFrame(timeline),
+        "scenario_label": f"{scenario_score[0]}x{scenario_score[1]} aos {cutoff_minute}'",
     }
 
 
@@ -965,6 +1087,11 @@ if not df_today.empty:
                 st.write(f"Campanha: {last10['record']}")
                 st.write(f"Pontos: {last10['points']}/{last10['max_points']} | Win Rate: {last10['win_rate']:.1f}%")
                 st.write(f"Placares 0x1: {last10['target_score_count']} em {last10['games_analyzed']} jogos")
+                st.write("---")
+                st.write(f"0x0 HT: {last10['ht_00']['total']} | Gol mandante até 75': {last10['ht_00']['home_goal_to_75']} | Gol visitante até 75': {last10['ht_00']['away_goal_to_75']}")
+                st.write(f"Permaneceu 0x0 até 75': {last10['ht_00']['stayed_score_to_75']} | Outro placar: {last10['ht_00']['changed_score_to_75']}")
+                st.write(f"0x1 HT: {last10['ht_01']['total']} | Gol mandante até 75': {last10['ht_01']['home_goal_to_75']} | Gol visitante até 75': {last10['ht_01']['away_goal_to_75']}")
+                st.write(f"Permaneceu 0x1 até 75': {last10['ht_01']['stayed_score_to_75']} | Outro placar: {last10['ht_01']['changed_score_to_75']}")
                 st.markdown("</div>", unsafe_allow_html=True)
             with p2:
                 last10 = results["last10_away"]
@@ -974,6 +1101,11 @@ if not df_today.empty:
                 st.write(f"Campanha: {last10['record']}")
                 st.write(f"Pontos: {last10['points']}/{last10['max_points']} | Win Rate: {last10['win_rate']:.1f}%")
                 st.write(f"Placares 0x1: {last10['target_score_count']} em {last10['games_analyzed']} jogos")
+                st.write("---")
+                st.write(f"0x0 HT: {last10['ht_00']['total']} | Gol mandante até 75': {last10['ht_00']['home_goal_to_75']} | Gol visitante até 75': {last10['ht_00']['away_goal_to_75']}")
+                st.write(f"Permaneceu 0x0 até 75': {last10['ht_00']['stayed_score_to_75']} | Outro placar: {last10['ht_00']['changed_score_to_75']}")
+                st.write(f"0x1 HT: {last10['ht_01']['total']} | Gol mandante até 75': {last10['ht_01']['home_goal_to_75']} | Gol visitante até 75': {last10['ht_01']['away_goal_to_75']}")
+                st.write(f"Permaneceu 0x1 até 75': {last10['ht_01']['stayed_score_to_75']} | Outro placar: {last10['ht_01']['changed_score_to_75']}")
                 st.markdown("</div>", unsafe_allow_html=True)
 
             # Métrica de Chutes por Gol
@@ -998,6 +1130,79 @@ if not df_today.empty:
                 )
                 st.write(results["away"]["shots_per_goal_desc"])
                 st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("---")
+            st.subheader("⏳ Poisson por Tempo Após 75'")
+
+            scenario_00_home = build_poisson_timing_scenario(df_hist, m_data["Home"], "home", (0, 0))
+            scenario_00_away = build_poisson_timing_scenario(df_hist, m_data["Away"], "away", (0, 0))
+            scenario_01_home = build_poisson_timing_scenario(df_hist, m_data["Home"], "home", (0, 1))
+            scenario_01_away = build_poisson_timing_scenario(df_hist, m_data["Away"], "away", (0, 1))
+
+            def render_poisson_time_block(title, home_scenario, away_scenario):
+                st.markdown(f"#### {title}")
+                b1, b2 = st.columns(2)
+
+                with b1:
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    st.write(f"**{m_data['Home']}**")
+                    if home_scenario:
+                        st.write(f"Cenário: {home_scenario['scenario_label']}")
+                        st.write(f"Amostra: {home_scenario['sample_size']} jogos")
+                        st.write(f"P(gol do mandante até 90'): {home_scenario['prob_home_goal']:.1f}%")
+                        st.write(f"P(gol na partida até 90'): {home_scenario['prob_match_goal']:.1f}%")
+                    else:
+                        st.write("Dados insuficientes para este cenário.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                with b2:
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    st.write(f"**{m_data['Away']}**")
+                    if away_scenario:
+                        st.write(f"Cenário: {away_scenario['scenario_label']}")
+                        st.write(f"Amostra: {away_scenario['sample_size']} jogos")
+                        st.write(f"P(gol do visitante até 90'): {away_scenario['prob_away_goal']:.1f}%")
+                        st.write(f"P(gol na partida até 90'): {away_scenario['prob_match_goal']:.1f}%")
+                    else:
+                        st.write("Dados insuficientes para este cenário.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                fig = go.Figure()
+                if home_scenario:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=home_scenario["timeline"]["Minute"],
+                            y=home_scenario["timeline"]["Match"],
+                            mode="lines+markers",
+                            name=f"{m_data['Home']} - Partida",
+                            line=dict(color="#00ff88"),
+                        ),
+                    )
+                if away_scenario:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=away_scenario["timeline"]["Minute"],
+                            y=away_scenario["timeline"]["Match"],
+                            mode="lines+markers",
+                            name=f"{m_data['Away']} - Partida",
+                            line=dict(color="#ff4b4b"),
+                        ),
+                    )
+
+                if fig.data:
+                    fig.update_layout(
+                        title=f"Probabilidade acumulada de gol após 75' - {title}",
+                        xaxis_title="Minuto",
+                        yaxis_title="Probabilidade (%)",
+                        template="plotly_dark",
+                        height=380,
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Sem amostra suficiente para calcular a distribuição deste cenário.")
+
+            render_poisson_time_block("Cenário 0x0 aos 75'", scenario_00_home, scenario_00_away)
+            render_poisson_time_block("Cenário 0x1 aos 75'", scenario_01_home, scenario_01_away)
 
             # --- NOVA SEÇÃO: ANÁLISE QUANTITATIVA DE TIMING ---
             st.markdown("---")
