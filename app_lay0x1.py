@@ -13,8 +13,88 @@ from scipy.stats import poisson
 # Configuração da Página
 st.set_page_config(page_title="Lay 0x1 PRO - FutStats", page_icon="📈", layout="wide")
 
-CACHE_VERSION = "2026-03-26-team-aliases-v10"
+CACHE_VERSION = "2026-03-29-team-aliases-v11"
 BETS_TRACKER_FILE = "bets_lay_tracker.csv"
+
+# Mapeamento explícito FootyStats → Betfair (nomes canônicos)
+FOOTYSTATS_TEAM_MAP = {
+    "Roma": "AS Roma",
+    "AFC Bournemouth": "Bournemouth",
+    "Almería": "Almeria",
+    "América Mineiro": "America Mineiro",
+    "Angers SCO": "Angers",
+    "Athletic Club Bilbao": "Ath Bilbao",
+    "Atlético GO": "Atletico GO",
+    "Atlético Madrid": "Atl. Madrid",
+    "Atlético PR": "Athletico-PR",
+    "Bayern München": "Bayern Munich",
+    "Boavista FC": "Boavista",
+    "Borussia Dortmund": "Dortmund",
+    "Borussia M'gladbach": "B. Monchengladbach",
+    "Botafogo": "Botafogo RJ",
+    "Brighton & Hove Albion": "Brighton",
+    "CA Osasuna": "Osasuna",
+    "CD Nacional": "Nacional",
+    "CD Tondela": "Tondela",
+    "Ceará": "Ceara",
+    "Celta de Vigo": "Celta Vigo",
+    "Chapecoense": "Chapecoense-SC",
+    "Criciúma": "Criciuma",
+    "Cuiabá": "Cuiaba",
+    "Cádiz": "Cadiz CF",
+    "Darmstadt 98": "Darmstadt",
+    "Deportivo Alavés": "Alaves",
+    "Elche CF": "Elche",
+    "Estrela Amadora": "Estrela",
+    "FC Arouca": "Arouca",
+    "FC Barcelona": "Barcelona",
+    "FC Vizela": "Vizela",
+    "Famalicão": "Famalicao",
+    "Flamengo": "Flamengo RJ",
+    "GD Chaves": "Chaves",
+    "GD Estoril Praia": "Estoril",
+    "Getafe CF": "Getafe",
+    "Girona FC": "Girona",
+    "Grêmio": "Gremio",
+    "Hellas Verona": "Verona",
+    "Inter Milan": "Inter",
+    "Ipswich Town": "Ipswich",
+    "Köln": "FC Koln",
+    "Leeds United": "Leeds",
+    "Leganés": "Leganes",
+    "Leicester City": "Leicester",
+    "Levante UD": "Levante",
+    "Luton Town": "Luton",
+    "Mainz 05": "Mainz",
+    "Manchester United": "Manchester Utd",
+    "Moreirense FC": "Moreirense",
+    "Newcastle United": "Newcastle",
+    "Nottingham Forest": "Nottingham",
+    "Olympique Lyonnais": "Lyon",
+    "Olympique Marseille": "Marseille",
+    "Paris": "Paris FC",
+    "Porto": "FC Porto",
+    "RCD Espanyol": "Espanyol",
+    "RCD Mallorca": "Mallorca",
+    "Real Betis": "Betis",
+    "Real Oviedo": "R. Oviedo",
+    "Real Valladolid": "Valladolid",
+    "Rio Ave FC": "Rio Ave",
+    "Saint-Étienne": "St Etienne",
+    "Sevilla FC": "Sevilla",
+    "Sheffield United": "Sheffield Utd",
+    "Sporting Braga": "Braga",
+    "Sporting CP": "Sporting CP",
+    "São Paulo": "Sao Paulo",
+    "Tottenham Hotspur": "Tottenham",
+    "UD Las Palmas": "Las Palmas",
+    "Valencia CF": "Valencia",
+    "Vasco da Gama": "Vasco",
+    "Vitória": "Vitoria",
+    "Vitória Guimarães": "Vitoria Guimaraes",
+    "West Ham United": "West Ham",
+    "Wolverhampton Wanderers": "Wolves",
+}
 
 
 # Função de Normalização de Nomes de Times
@@ -24,118 +104,6 @@ def normalize_team_name(name):
     # Converter para string e remover acentos
     name = str(name).lower()
     name = "".join(c for c in unicodedata.normalize("NFD", name) if unicodedata.category(c) != "Mn")
-
-    # Substituições específicas de siglas/nomes para uniformização
-    name = name.replace("atletico mg", "atletico mineiro")
-    name = name.replace("atletico-mg", "atletico mineiro")
-    name = name.replace("atletico pr", "athletico paranaense")
-    name = name.replace("atletico-pr", "athletico paranaense")
-    name = name.replace("athletico pr", "athletico paranaense")
-    name = name.replace("athletico-pr", "athletico paranaense")
-    name = name.replace("atletico go", "atletico goianiense")
-    name = name.replace("atletico-go", "atletico goianiense")
-    name = name.replace("botafogo rj", "botafogo")
-    name = name.replace("botafogo fr", "botafogo")
-    name = name.replace("flamengo rj", "flamengo")
-    name = name.replace("flamengo cr", "flamengo")
-    name = name.replace("vasco da gama", "vasco")
-    name = name.replace("bragantino", "red bull bragantino")
-
-    # Ligas Internacionais
-    name = name.replace("as roma", "roma")
-    name = name.replace("us lecce", "lecce")
-    name = name.replace("ac milan", "milan")
-    name = name.replace("inter milan", "inter")
-    name = name.replace("internazionale", "inter")
-    name = name.replace("hellas verona", "verona")
-    name = name.replace("real madrid", "realmadrid")
-    name = name.replace("atl. madrid", "atleticomadrid")
-    name = name.replace("atletico madrid", "atleticomadrid")
-    name = name.replace("manchester city", "mancity")
-    name = name.replace("manchester united", "manunited")
-    name = name.replace("west ham united", "westham")
-    name = name.replace("west ham", "westham")
-    name = name.replace("newcastle united", "newcastle")
-    name = name.replace("leeds united", "leeds")
-    name = name.replace("leicester city", "leicester")
-    name = name.replace("norwich city", "norwich")
-    name = name.replace("ipswich town", "ipswich")
-    name = name.replace("wolverhampton wanderers", "wolverhampton")
-    name = name.replace("wolves", "wolverhampton")
-    name = name.replace("west bromwich albion", "westbrom")
-    name = name.replace("west brom", "westbrom")
-    name = name.replace("nottm forest", "nottingham")
-    name = name.replace("nottingham forest", "nottingham")
-    name = name.replace("tottenham hotspur", "tottenham")
-    name = name.replace("bayern munchen", "bayern")
-    name = name.replace("bayern munich", "bayern")
-    name = name.replace("psg", "psg")
-    name = name.replace("st germain", "psg")
-    name = name.replace("ss lazio", "lazio")
-    name = name.replace("ssc napoli", "napoli")
-    name = name.replace("as monaco", "monaco")
-    name = name.replace("bologna fc 1909", "bologna")
-    name = name.replace("genoa cfc", "genoa")
-    name = name.replace("sampdoria uc", "sampdoria")
-    name = name.replace("hellas verona fc", "verona")
-    name = name.replace("ath bilbao", "athleticbilbao")
-    name = name.replace("athletic club", "athleticbilbao")
-    name = name.replace("athletic bilbao", "athleticbilbao")
-    name = name.replace("athletic club bilbao", "athleticbilbao")
-    name = name.replace("real sociedad", "realsociedad")
-    name = name.replace("atletico-madrid", "atleticomadrid")
-    name = name.replace("atletico de madrid", "atleticomadrid")
-    name = name.replace("fc barcelona", "barcelona")
-    name = name.replace("barcelona fc", "barcelona")
-    name = name.replace("rcd espanyol", "espanyol")
-    name = name.replace("espanyol barcelona", "espanyol")
-    name = name.replace("reial club deportiu espanyol", "espanyol")
-    name = name.replace("olympique de marseille", "marseille")
-    name = name.replace("olympique marseille", "marseille")
-    name = name.replace("lille osc metropole", "lille")
-    name = name.replace("lille osc", "lille")
-    name = name.replace("olympique lyonnais", "lyon")
-    name = name.replace("paris saint germain", "psg")
-    name = name.replace("paris saint-germain", "psg")
-    name = name.replace("ogc nice cote dazur", "nice")
-    name = name.replace("ogc nice", "nice")
-    name = name.replace("rc strasbourg alsace", "strasbourg")
-    name = name.replace("stade rennais", "rennes")
-    name = name.replace("stade rennais fc", "rennes")
-    name = name.replace("stade brestois 29", "brest")
-    name = name.replace("angers sco", "angers")
-    name = name.replace("angers sporting club de louest", "angers")
-    name = name.replace("le havre ac", "lehavre")
-    name = name.replace("le havre", "lehavre")
-    name = name.replace("association jeunesse auxerroise", "auxerre")
-    name = name.replace("aj auxerre", "auxerre")
-    name = name.replace("paris fc", "parisfc")
-    name = name.replace("gd estoril praia", "estoril")
-    name = name.replace("estoril praia", "estoril")
-    name = name.replace("rio ave fc", "rioave")
-    name = name.replace("rio ave", "rioave")
-    name = name.replace("sporting lisbon", "sportingcp")
-    name = name.replace("sporting cp", "sportingcp")
-    name = name.replace("vitoria guimaraes", "vitoriaguimaraes")
-    name = name.replace("vitoria de guimaraes", "vitoriaguimaraes")
-    name = name.replace("vitoria sc guimaraes", "vitoriaguimaraes")
-    name = name.replace("vitoria sc", "vitoriaguimaraes")
-    name = name.replace("guimaraes", "vitoriaguimaraes")
-    name = name.replace("sevilla fc", "sevilla")
-    name = name.replace("valencia cf", "valencia")
-    name = name.replace("villarreal cf", "villarreal")
-    name = name.replace("getafe cf", "getafe")
-    name = name.replace("granada cf", "granada")
-    name = name.replace("rayo vallecano", "rayovallecano")
-    name = name.replace("deportivo alaves", "alaves")
-    name = name.replace("rcd mallorca", "mallorca")
-    name = name.replace("real mallorca", "mallorca")
-    name = name.replace("real club deportivo mallorca", "mallorca")
-    name = name.replace("celta de vigo", "celta")
-    name = name.replace("real club celta de vigo", "celta")
-    name = name.replace("real betis", "betis")
-    name = name.replace("ca osasuna", "osasuna")
-    name = name.replace("osasuna ca", "osasuna")
 
     # Remover prefixos/sufixos de clubes comuns
     name = name.replace("se ", " ").replace("sc ", " ").replace("ec ", " ").replace("cr ", " ").replace("fc ", " ").replace("as ", " ").replace("us ", " ").replace("afc ", " ").replace("rcd ", " ").replace("rc ", " ").replace("cf ", " ").replace("cd ", " ")
@@ -293,11 +261,15 @@ st.markdown(
 # Funções de Carregamento de Dados
 @st.cache_data(ttl=3599)
 def load_data(_cache_version=CACHE_VERSION):
+    merged_path = "data_total/dados_historico.csv"
     hist_path = "data_total/dados_betfair.csv"
     footy_path = "data_total/dados_footystats.csv"
 
-    if os.path.exists(hist_path):
-        df = pd.read_csv(hist_path, sep=";")
+    # Preferir arquivo pré-processado (dados_historico.csv) se disponível
+    source_path = merged_path if os.path.exists(merged_path) else hist_path
+
+    if os.path.exists(source_path):
+        df = pd.read_csv(source_path, sep=";")
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.dropna(subset=["Goals_H_FT", "Goals_A_FT"])
 
@@ -305,11 +277,15 @@ def load_data(_cache_version=CACHE_VERSION):
         df["Norm_Home"] = df["Home"].apply(normalize_team_name)
         df["Norm_Away"] = df["Away"].apply(normalize_team_name)
 
-        # Carregar dados adicionais do FootyStats para métricas avançadas (xG, PPG, Ataques)
-        if os.path.exists(footy_path):
+        # Merge com FootyStats apenas se usando o arquivo base (sem dados pré-processados)
+        if source_path == hist_path and os.path.exists(footy_path):
             try:
                 df_footy = pd.read_csv(footy_path, sep=";")
                 df_footy["Date"] = pd.to_datetime(df_footy["Date"])
+
+                # Aplicar mapeamento explícito de nomes antes de normalizar
+                df_footy["Home"] = df_footy["Home"].replace(FOOTYSTATS_TEAM_MAP)
+                df_footy["Away"] = df_footy["Away"].replace(FOOTYSTATS_TEAM_MAP)
 
                 # Selecionar colunas relevantes do FootyStats
                 cols_to_merge = [
