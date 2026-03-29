@@ -14,6 +14,7 @@ from scipy.stats import poisson
 st.set_page_config(page_title="Lay 0x1 PRO - FutStats", page_icon="📈", layout="wide")
 
 CACHE_VERSION = "2026-03-26-team-aliases-v10"
+BETS_TRACKER_FILE = "bets_lay_tracker.csv"
 
 
 # Função de Normalização de Nomes de Times
@@ -153,6 +154,114 @@ def normalize_team_name(name):
     # Limpeza final: remover tudo que não for a-z ou 0-9
     name = re.sub(r"[^a-z0-9]", "", name)
     return name
+
+
+def load_lay_bets():
+    expected_cols = [
+        "data",
+        "mandante",
+        "visitante",
+        "hora",
+        "mercado",
+        "odd_entrada",
+        "valor_aposta",
+        "responsabilidade",
+        "entrada",
+        "saida",
+        "odd_saida_75min",
+        "resultado",
+        "percentual_resultado",
+    ]
+    if os.path.exists(BETS_TRACKER_FILE):
+        df = pd.read_csv(BETS_TRACKER_FILE)
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = np.nan
+        df = df[expected_cols].copy()
+        df["saida"] = df["saida"].fillna("")
+        df["percentual_resultado"] = np.where(
+            df["responsabilidade"].fillna(0) > 0,
+            (df["resultado"] / df["responsabilidade"]) * 100,
+            np.nan,
+        )
+        return df
+    return pd.DataFrame(columns=expected_cols)
+
+
+def save_lay_bets(df_bets):
+    df_bets.to_csv(BETS_TRACKER_FILE, index=False)
+
+
+def calculate_lay_liability(odd_entrada, valor_aposta):
+    return valor_aposta * max(odd_entrada - 1, 0)
+
+
+def calculate_lay_result(odd_entrada, valor_aposta, saida, odd_saida_75min):
+    if saida == "Green":
+        return valor_aposta
+    if saida == "75min" and odd_saida_75min and odd_saida_75min > 0:
+        hedge_back_stake = (odd_entrada * valor_aposta) / odd_saida_75min
+        return valor_aposta - hedge_back_stake
+    return np.nan
+
+
+def build_bet_label(row_idx, row):
+    return f"#{row_idx} | {row['data']} {row['hora']} | {row['mandante']} vs {row['visitante']} | {row['mercado']}"
+
+
+def style_bets_dataframe(df_bets):
+    display_columns = [
+        "Data",
+        "Mandante",
+        "Visitante",
+        "Hora",
+        "Mercado",
+        "Odd Entrada",
+        "Stake (R$)",
+        "Responsabilidade (R$)",
+        "Tipo de Entrada",
+        "Saida",
+        "Odd Saida 75min",
+        "Resultado (R$)",
+        "Performance %",
+    ]
+    df_display = df_bets.copy().rename(
+        columns={
+            "data": "Data",
+            "mandante": "Mandante",
+            "visitante": "Visitante",
+            "hora": "Hora",
+            "mercado": "Mercado",
+            "odd_entrada": "Odd Entrada",
+            "valor_aposta": "Stake (R$)",
+            "responsabilidade": "Responsabilidade (R$)",
+            "entrada": "Tipo de Entrada",
+            "saida": "Saida",
+            "odd_saida_75min": "Odd Saida 75min",
+            "resultado": "Resultado (R$)",
+            "percentual_resultado": "Performance %",
+        },
+    )
+    df_display = df_display[display_columns]
+
+    def color_performance(value):
+        if pd.isna(value):
+            return ""
+        if value > 0:
+            return "color: #00ff88; font-weight: bold;"
+        if value < 0:
+            return "color: #ff4b4b; font-weight: bold;"
+        return "color: #ffcc00; font-weight: bold;"
+
+    formatters = {
+        "Odd Entrada": "{:.2f}",
+        "Stake (R$)": "R$ {:.2f}",
+        "Responsabilidade (R$)": "R$ {:.2f}",
+        "Odd Saida 75min": lambda x: "" if pd.isna(x) else f"{x:.2f}",
+        "Resultado (R$)": lambda x: "" if pd.isna(x) else f"R$ {x:.2f}",
+        "Performance %": lambda x: "" if pd.isna(x) else f"{x:+.1f}%",
+    }
+    return df_display.style.format(formatters).map(color_performance, subset=["Resultado (R$)", "Performance %"])
 
 
 # Estilo Customizado Profissional
@@ -854,6 +963,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
 
 # Interface
 st.title("🛡️ Lay 0x1 Ultimate - Professional Trading Tool")
+main_tab, bets_tab = st.tabs(["🛡️ Lay 0x1 Ultimate", "🧾 Planilha"])
 
 df_hist = load_data()
 df_today = load_today_games()
@@ -872,41 +982,92 @@ date_selected = st.sidebar.date_input(
 leagues = sorted(df_hist["League"].unique().tolist())
 selected_leagues = st.sidebar.multiselect("Ligas", leagues, default=leagues[:5])
 
-if not df_today.empty:
-    df_day_filtered = df_today[(df_today["Date"].dt.date == date_selected)]
-    if selected_leagues:
-        df_day_filtered = df_day_filtered[df_day_filtered["League"].isin(selected_leagues)]
+with main_tab:
+    if not df_today.empty:
+        df_day_filtered = df_today[(df_today["Date"].dt.date == date_selected)]
+        if selected_leagues:
+            df_day_filtered = df_day_filtered[df_day_filtered["League"].isin(selected_leagues)]
 
-    if not df_day_filtered.empty:
-        st.subheader(f"📅 Jogos Encontrados em {date_selected}")
+        if not df_day_filtered.empty:
+            st.subheader(f"📅 Jogos Encontrados em {date_selected}")
 
-        df_day_filtered["Match"] = df_day_filtered["Home"] + " vs " + df_day_filtered["Away"]
-        selected_match = st.selectbox(
-            "Selecione o Jogo para Análise Profunda",
-            df_day_filtered["Match"].tolist(),
-        )
+            df_day_filtered["Match"] = df_day_filtered["Home"] + " vs " + df_day_filtered["Away"]
+            selected_match = st.selectbox(
+                "Selecione o Jogo para Análise Profunda",
+                df_day_filtered["Match"].tolist(),
+            )
 
-        m_data = df_day_filtered[df_day_filtered["Match"] == selected_match].iloc[0]
-        results = calculate_pro_metrics(df_hist, m_data["Home"], m_data["Away"], m_data)
+            m_data = df_day_filtered[df_day_filtered["Match"] == selected_match].iloc[0]
+            results = calculate_pro_metrics(df_hist, m_data["Home"], m_data["Away"], m_data)
 
-        if results:
-            # DASHBOARD DE ODDS
-            st.markdown("---")
-            st.subheader("💰 Monitoramento de Odds de Mercado")
-            o1, o2, o3, o4, o5 = st.columns(5)
-            with o1:
-                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                st.write("**Match Odds (H/D/A)**")
-                st.write(
-                    f"H: {m_data.get('Odd_H_Back', 0):.2f} / {m_data.get('Odd_H_Lay', 0):.2f}",
-                )
-                st.write(
-                    f"D: {m_data.get('Odd_D_Back', 0):.2f} / {m_data.get('Odd_D_Lay', 0):.2f}",
-                )
-                st.write(
-                    f"A: {m_data.get('Odd_A_Back', 0):.2f} / {m_data.get('Odd_A_Lay', 0):.2f}",
-                )
-                st.markdown("</div>", unsafe_allow_html=True)
+            if results:
+                st.markdown("---")
+                st.subheader("📝 Registrar Aposta")
+                with st.form(key=f"bet_form_lay01_{m_data['Home']}_{m_data['Away']}"):
+                    f1, f2, f3 = st.columns(3)
+                    with f1:
+                        odd_entrada = st.number_input(
+                            "Odd Entrada",
+                            min_value=1.01,
+                            value=float(m_data.get("Odd_CS_0x1_Lay", 0) or 1.01),
+                            step=0.01,
+                        )
+                    with f2:
+                        valor_aposta = st.number_input(
+                            "Valor da Aposta (R$)",
+                            min_value=0.01,
+                            value=10.0,
+                            step=1.0,
+                        )
+                    with f3:
+                        responsabilidade = calculate_lay_liability(odd_entrada, valor_aposta)
+                        st.metric("Responsabilidade", f"R$ {responsabilidade:.2f}")
+
+                    entrada_tipo = st.selectbox("Entrada", ["Pre-Live", "Ao Vivo"])
+
+                    submitted = st.form_submit_button("Apostar", use_container_width=True)
+                    if submitted:
+                        df_bets = load_lay_bets()
+                        new_bet = pd.DataFrame(
+                            [
+                                {
+                                    "data": str(pd.to_datetime(m_data["Date"]).date()),
+                                    "mandante": m_data["Home"],
+                                    "visitante": m_data["Away"],
+                                    "hora": m_data.get("Time", ""),
+                                    "mercado": "Lay 0x1",
+                                    "odd_entrada": round(odd_entrada, 2),
+                                    "valor_aposta": round(valor_aposta, 2),
+                                    "responsabilidade": round(responsabilidade, 2),
+                                    "entrada": entrada_tipo,
+                                    "saida": "",
+                                    "odd_saida_75min": np.nan,
+                                    "resultado": np.nan,
+                                    "percentual_resultado": np.nan,
+                                },
+                            ],
+                        )
+                        df_bets = pd.concat([df_bets, new_bet], ignore_index=True)
+                        save_lay_bets(df_bets)
+                        st.success("Entrada registrada com sucesso na planilha.")
+
+                # DASHBOARD DE ODDS
+                st.markdown("---")
+                st.subheader("💰 Monitoramento de Odds de Mercado")
+                o1, o2, o3, o4, o5 = st.columns(5)
+                with o1:
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    st.write("**Match Odds (H/D/A)**")
+                    st.write(
+                        f"H: {m_data.get('Odd_H_Back', 0):.2f} / {m_data.get('Odd_H_Lay', 0):.2f}",
+                    )
+                    st.write(
+                        f"D: {m_data.get('Odd_D_Back', 0):.2f} / {m_data.get('Odd_D_Lay', 0):.2f}",
+                    )
+                    st.write(
+                        f"A: {m_data.get('Odd_A_Back', 0):.2f} / {m_data.get('Odd_A_Lay', 0):.2f}",
+                    )
+                    st.markdown("</div>", unsafe_allow_html=True)
             with o2:
                 st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                 st.write("**Over 2.5 Goals**")
@@ -1359,12 +1520,122 @@ if not df_today.empty:
             )
             st.plotly_chart(fig_matrix, use_container_width=True)
 
-        else:
-            st.warning("Dados históricos insuficientes para este confronto.")
+with bets_tab:
+    st.subheader("🧾 Planilha de Apostas")
+    df_bets_all = load_lay_bets()
+    if df_bets_all.empty:
+        st.info("Nenhuma entrada registrada ainda.")
     else:
-        st.info(f"Nenhum jogo encontrado para {date_selected}.")
-else:
-    st.error("Arquivos de jogos do dia não encontrados.")
+        st.dataframe(style_bets_dataframe(df_bets_all.iloc[::-1]), use_container_width=True)
+
+        options_map = {build_bet_label(idx, row): idx for idx, row in df_bets_all.iloc[::-1].iterrows()}
+        selected_bet_label = st.selectbox(
+            "Selecione uma entrada para atualizar saída ou excluir",
+            list(options_map.keys()),
+        )
+        selected_bet_idx = options_map[selected_bet_label]
+        selected_bet = df_bets_all.loc[selected_bet_idx]
+
+        e1, e2, e3 = st.columns(3)
+        with e1:
+            saida_edit = st.selectbox(
+                "Saída",
+                ["", "Green", "75min"],
+                index=["", "Green", "75min"].index(selected_bet.get("saida", "") if selected_bet.get("saida", "") in ["", "Green", "75min"] else ""),
+                key=f"saida_edit_lay01_{selected_bet_idx}",
+            )
+        with e2:
+            odd_saida_default = 0.0 if pd.isna(selected_bet.get("odd_saida_75min")) else float(selected_bet.get("odd_saida_75min", 0.0))
+            odd_saida_edit = st.number_input(
+                "Odd Saída 75min",
+                min_value=0.0,
+                value=odd_saida_default,
+                step=0.01,
+                disabled=saida_edit != "75min",
+                key=f"odd_saida_edit_lay01_{selected_bet_idx}",
+            )
+        with e3:
+            resultado_preview = calculate_lay_result(
+                float(selected_bet["odd_entrada"]),
+                float(selected_bet["valor_aposta"]),
+                saida_edit,
+                odd_saida_edit,
+            )
+            st.metric(
+                "Resultado",
+                f"R$ {resultado_preview:.2f}" if pd.notna(resultado_preview) else "Pendente",
+            )
+
+        a1, a2 = st.columns(2)
+        with a1:
+            if st.button("Salvar Saída", use_container_width=True, key=f"save_exit_lay01_{selected_bet_idx}"):
+                df_bets_all.loc[selected_bet_idx, "saida"] = saida_edit
+                df_bets_all.loc[selected_bet_idx, "odd_saida_75min"] = round(odd_saida_edit, 2) if saida_edit == "75min" else np.nan
+                df_bets_all.loc[selected_bet_idx, "resultado"] = round(resultado_preview, 2) if pd.notna(resultado_preview) else np.nan
+                df_bets_all.loc[selected_bet_idx, "percentual_resultado"] = round((resultado_preview / float(selected_bet["responsabilidade"])) * 100, 2) if pd.notna(resultado_preview) and float(selected_bet["responsabilidade"]) > 0 else np.nan
+                save_lay_bets(df_bets_all)
+                st.success("Saída atualizada com sucesso.")
+        with a2:
+            if st.button("Excluir Entrada", use_container_width=True, key=f"delete_bet_lay01_{selected_bet_idx}"):
+                df_bets_all = df_bets_all.drop(index=selected_bet_idx).reset_index(drop=True)
+                save_lay_bets(df_bets_all)
+                st.success("Entrada excluída com sucesso.")
+
+        st.markdown("---")
+        st.markdown("#### 📊 Estatísticas da Planilha")
+        settled_bets = df_bets_all[df_bets_all["resultado"].notna()].copy()
+        total_bets = len(df_bets_all)
+        settled_count = len(settled_bets)
+        greens_count = int((settled_bets["resultado"] > 0).sum())
+        reds_count = int((settled_bets["resultado"] < 0).sum())
+        total_stake = float(df_bets_all["valor_aposta"].fillna(0).sum())
+        total_liability = float(df_bets_all["responsabilidade"].fillna(0).sum())
+        total_result = float(settled_bets["resultado"].fillna(0).sum())
+        avg_odd = float(df_bets_all["odd_entrada"].fillna(0).mean()) if total_bets else 0.0
+        avg_result = float(settled_bets["resultado"].fillna(0).mean()) if settled_count else 0.0
+        roi_stake = (total_result / total_stake) * 100 if total_stake > 0 else 0.0
+        roi_liability = (total_result / total_liability) * 100 if total_liability > 0 else 0.0
+        green_rate = (greens_count / settled_count) * 100 if settled_count > 0 else 0.0
+
+        m1, m2, m3, m4, m5, m6 = st.columns(6)
+        with m1:
+            st.metric("ROI Stake", f"{roi_stake:+.1f}%")
+        with m2:
+            st.metric("ROI Respons.", f"{roi_liability:+.1f}%")
+        with m3:
+            st.metric("Acumulado", f"R$ {total_result:.2f}")
+        with m4:
+            st.metric("Greens", str(greens_count))
+        with m5:
+            st.metric("Reds", str(reds_count))
+        with m6:
+            st.metric("Odd Média", f"{avg_odd:.2f}")
+
+        s1, s2, s3, s4 = st.columns(4)
+        with s1:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.write("**Volume**")
+            st.write(f"Entradas totais: {total_bets}")
+            st.write(f"Apostas liquidadas: {settled_count}")
+            st.markdown("</div>", unsafe_allow_html=True)
+        with s2:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.write("**Capital Exposto**")
+            st.write(f"Stake total: R$ {total_stake:.2f}")
+            st.write(f"Responsabilidade total: R$ {total_liability:.2f}")
+            st.markdown("</div>", unsafe_allow_html=True)
+        with s3:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.write("**Eficiência**")
+            st.write(f"Taxa de green: {green_rate:.1f}%")
+            st.write(f"Resultado médio: R$ {avg_result:.2f}")
+            st.markdown("</div>", unsafe_allow_html=True)
+        with s4:
+            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+            st.write("**Leitura Rápida**")
+            st.write(f"Melhor base %: {roi_liability:+.1f}% sobre responsabilidade")
+            st.write("Mercado dominante: Lay 0x1")
+            st.markdown("</div>", unsafe_allow_html=True)
 
 # Rodapé
 st.markdown("---")
