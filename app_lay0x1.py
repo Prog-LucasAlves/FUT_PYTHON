@@ -445,7 +445,15 @@ def get_last_10_team_summary(df_games, team_name, target_score):
     max_points = total_games * 3
 
     def build_ht_scenario_summary(df, ht_score):
-        scenario_games = df[(df["Goals_H_HT"] == ht_score[0]) & (df["Goals_A_HT"] == ht_score[1])].copy()
+        # Filtrar jogos em que o placar HT, do ponto de vista do time analisado,
+        # é ht_score[0] (gols pró) x ht_score[1] (gols contra)
+        def match_ht_score(row):
+            if row["Norm_Home"] == team_norm:
+                return row["Goals_H_HT"] == ht_score[0] and row["Goals_A_HT"] == ht_score[1]
+            else:
+                return row["Goals_A_HT"] == ht_score[0] and row["Goals_H_HT"] == ht_score[1]
+
+        scenario_games = df[df.apply(match_ht_score, axis=1)].copy()
         if scenario_games.empty:
             return {
                 "total": 0,
@@ -456,20 +464,22 @@ def get_last_10_team_summary(df_games, team_name, target_score):
             }
 
         def score_until_75(row):
-            home_75 = count_goals_until(row["Min_Goals_H"], 75)
-            away_75 = count_goals_until(row["Min_Goals_A"], 75)
-            return home_75, away_75
+            # Retorna (gols_pro_time, gols_contra_time) até o minuto 75
+            if row["Norm_Home"] == team_norm:
+                return count_goals_until(row["Min_Goals_H"], 75), count_goals_until(row["Min_Goals_A"], 75)
+            else:
+                return count_goals_until(row["Min_Goals_A"], 75), count_goals_until(row["Min_Goals_H"], 75)
 
         scores_75 = scenario_games.apply(score_until_75, axis=1)
-        home_scores_75 = scores_75.apply(lambda x: x[0])
-        away_scores_75 = scores_75.apply(lambda x: x[1])
+        team_scores_75 = scores_75.apply(lambda x: x[0])
+        opp_scores_75 = scores_75.apply(lambda x: x[1])
 
-        stayed_mask = (home_scores_75 == ht_score[0]) & (away_scores_75 == ht_score[1])
+        stayed_mask = (team_scores_75 == ht_score[0]) & (opp_scores_75 == ht_score[1])
 
         return {
             "total": int(len(scenario_games)),
-            "home_goal_to_75": int((home_scores_75 > ht_score[0]).sum()),
-            "away_goal_to_75": int((away_scores_75 > ht_score[1]).sum()),
+            "home_goal_to_75": int((team_scores_75 > ht_score[0]).sum()),
+            "away_goal_to_75": int((opp_scores_75 > ht_score[1]).sum()),
             "stayed_score_to_75": int(stayed_mask.sum()),
             "changed_score_to_75": int((~stayed_mask).sum()),
         }
@@ -514,6 +524,80 @@ def count_goals_until(mins_list, minute_limit):
 def count_goals_after(mins_list, minute_limit):
     valid_minutes = [m for m in (normalize_goal_minute(m) for m in mins_list) if m is not None]
     return sum(1 for m in valid_minutes if m > minute_limit)
+
+
+def get_h2h_stats(df_games, home_team, away_team):
+    norm_h = normalize_team_name(home_team)
+    norm_a = normalize_team_name(away_team)
+
+    h2h = df_games[((df_games["Norm_Home"] == norm_h) & (df_games["Norm_Away"] == norm_a)) | ((df_games["Norm_Home"] == norm_a) & (df_games["Norm_Away"] == norm_h))].copy()
+
+    if h2h.empty:
+        return None
+
+    h2h = h2h.sort_values("Date", ascending=False)
+    total = len(h2h)
+
+    score_0x1 = len(h2h[(h2h["Goals_H_FT"] == 0) & (h2h["Goals_A_FT"] == 1)])
+    score_1x0 = len(h2h[(h2h["Goals_H_FT"] == 1) & (h2h["Goals_A_FT"] == 0)])
+    score_0x0 = len(h2h[(h2h["Goals_H_FT"] == 0) & (h2h["Goals_A_FT"] == 0)])
+
+    ft_scores = h2h["Goals_H_FT"].astype(int).astype(str) + "x" + h2h["Goals_A_FT"].astype(int).astype(str)
+    top_scores = (ft_scores.value_counts(normalize=True) * 100).head(5).to_dict()
+
+    return {
+        "total": total,
+        "score_0x1": score_0x1,
+        "score_0x1_pct": (score_0x1 / total) * 100,
+        "score_1x0": score_1x0,
+        "score_0x0": score_0x0,
+        "top_scores": top_scores,
+        "games": h2h,
+    }
+
+
+def get_goal_interval_stats(df_games, home_team, away_team):
+    norm_h = normalize_team_name(home_team)
+    norm_a = normalize_team_name(away_team)
+
+    h_games = df_games[(df_games["Norm_Home"] == norm_h) | (df_games["Norm_Away"] == norm_h)].copy()
+    a_games = df_games[(df_games["Norm_Home"] == norm_a) | (df_games["Norm_Away"] == norm_a)].copy()
+
+    intervals = [(0, 15), (15, 30), (30, 45), (45, 60), (60, 75), (75, 90)]
+
+    def calc_interval_pct(games, mins_col):
+        result = {}
+        total = len(games)
+        if total == 0:
+            return {f"{a}-{b}'": 0.0 for a, b in intervals}
+        for start, end in intervals:
+            label = f"{start}-{end}'"
+            count = games[mins_col].apply(lambda mins: any((m := normalize_goal_minute(x)) is not None and start < m <= end for x in mins)).sum()
+            result[label] = (count / total) * 100
+        return result
+
+    def calc_combined(games):
+        result = {}
+        total = len(games)
+        if total == 0:
+            return {f"{a}-{b}'": 0.0 for a, b in intervals}
+        for start, end in intervals:
+            label = f"{start}-{end}'"
+            count = games.apply(
+                lambda row: any((m := normalize_goal_minute(x)) is not None and start < m <= end for x in (row["Min_Goals_H"] + row["Min_Goals_A"])),
+                axis=1,
+            ).sum()
+            result[label] = (count / total) * 100
+        return result
+
+    return {
+        "home_attack": calc_interval_pct(h_games, "Min_Goals_H"),
+        "away_attack": calc_interval_pct(a_games, "Min_Goals_A"),
+        "home_combined": calc_combined(h_games),
+        "away_combined": calc_combined(a_games),
+        "home_sample": len(h_games),
+        "away_sample": len(a_games),
+    }
 
 
 def build_poisson_timing_scenario(df_games, team_name, role, scenario_score, cutoff_minute=75, end_minute=90):
@@ -621,14 +705,14 @@ def analyze_goal_timing(df_games, home_team, away_team):
         games_00_ht = games[(games["Goals_H_HT"] == 0) & (games["Goals_A_HT"] == 0)]
 
         def first_in_2h(mins_list):
-            m2h = [m for m in mins_list if m > 45]
+            m2h = [m for m in (normalize_goal_minute(m) for m in mins_list) if m is not None and m > 45]
             return min(m2h) if len(m2h) > 0 else None
 
         team_mins_00ht = games_00_ht.apply(get_team_mins, axis=1)
         first_team_2h = team_mins_00ht.apply(first_in_2h).dropna()
 
         def match_first_2h(row):
-            all_2h = [m for m in (row["Min_Goals_H"] + row["Min_Goals_A"]) if m > 45]
+            all_2h = [m for m in (normalize_goal_minute(m) for m in (row["Min_Goals_H"] + row["Min_Goals_A"])) if m is not None and m > 45]
             return min(all_2h) if len(all_2h) > 0 else None
 
         first_match_2h = games_00_ht.apply(match_first_2h, axis=1).dropna()
@@ -747,6 +831,15 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
             "shots_per_goal": finishing_value,
             "shots_per_goal_label": finishing_label,
             "shots_per_goal_desc": finishing_desc,
+            # Clean Sheet: % de jogos em que o time não sofreu gol
+            "clean_sheet_pct": (
+                games.apply(
+                    lambda r: (r["Goals_A_FT"] == 0) if r["Norm_Home"] == team_norm else (r["Goals_H_FT"] == 0),
+                    axis=1,
+                ).sum()
+                / len(games)
+            )
+            * 100,
         }
 
     def capped_score(value, max_value, invert=False, default=50):
@@ -867,7 +960,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
     # 1º Condição 1.80-2.09 | 4.00-4.99 | 20.0+
     cond1 = (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.99) and (odd_lay_0x1 >= 20.00)
     # 2º Condição 1.80-2.09 | 4.00-4.99 | 13.0-13.9
-    cond2 = (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.90) and (13.00 <= odd_lay_0x1 <= 19.90)
+    cond2 = (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.99) and (13.00 <= odd_lay_0x1 <= 13.90)
     # 3º Condição 2.10-2.49 | 3.50-3.99 | 12.0-12.9
     cond3 = (2.10 <= odd_h_back <= 2.49) and (3.50 <= odd_a_back <= 3.90) and (12.00 <= odd_lay_0x1 <= 12.90)
     # 4º Condição 1.80-2.09 | 4.00-4.99 | 18.0-19.9
@@ -921,12 +1014,6 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
         score += 2
         reasons.append(f"Sucesso histórico excelente ({combined_success:.1f}%)")
 
-    # Cálculo de CLV (Closing Line Value)
-    odd_open = current_match_data.get("Odd_CS_0x1_Lay", 0)
-    # Para simulação, vamos assumir que a odd de fechamento caiu 10% (mercado percebeu valor)
-    odd_close = odd_open * 0.9
-    clv = (((odd_open / odd_close) - 1) * 100) if odd_close > 0 and odd_open > 0 else 0
-
     recommendation = "NÃO INDICADO"
     if score >= 10:
         recommendation = "FORTE INDICAÇÃO"
@@ -957,7 +1044,6 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data):
         "recommendation": recommendation,
         "score": score,
         "reasons": reasons,
-        "clv": clv,
     }
 
 
@@ -1103,7 +1189,7 @@ with main_tab:
                     st.markdown("</div>", unsafe_allow_html=True)
                 with o5:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.write("**Valor (EV & CLV)**")
+                    st.write("**Valor (EV)**")
                     odd_lay = m_data.get("Odd_CS_0x1_Lay", 0)
                     if odd_lay > 0:
                         ev = (results["combined_success"] / 100) * 1 - (1 - results["combined_success"] / 100) * (odd_lay - 1)
@@ -1111,13 +1197,8 @@ with main_tab:
                             f"EV: <span class='{'highlight-green' if ev > 0 else 'highlight-red'}'>{ev:+.2f}</span>",
                             unsafe_allow_html=True,
                         )
-                        st.write(
-                            f"CLV: <span class='{'highlight-green' if results.get('clv', 0) > 0 else 'highlight-red'}'>{results.get('clv', 0):+.1f}%</span>",
-                            unsafe_allow_html=True,
-                        )
                     else:
                         st.write("EV: <span style='color: #888;'>Indisponível</span>", unsafe_allow_html=True)
-                        st.write("CLV: <span style='color: #888;'>Indisponível</span>", unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 # ESTRATÉGIA VENCEDORA
@@ -1149,6 +1230,9 @@ with main_tab:
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 t_stats_h, t_stats_a, t_combined_scores = analyze_goal_timing(df_hist, m_data["Home"], m_data["Away"])
+
+                # H2H
+                h2h_stats = get_h2h_stats(df_hist, m_data["Home"], m_data["Away"])
 
                 # CRITÉRIOS DE SAÍDA E GESTÃO DE RISCO (MÉTODO GET UP / LUKE)
                 st.markdown("---")
@@ -1188,6 +1272,111 @@ with main_tab:
                 A média de tempo do primeiro gol da partida para este confronto é **{format_minutes(t_stats_h["avg_first_match"]) if t_stats_h else "N/A"}**.
                 Se passar de **{exit_minute}'**, a variância aumenta e a lucratividade de longo prazo cai.
                 """)
+
+                # CLEAN SHEET DO VISITANTE
+                st.markdown("---")
+                st.subheader("🧹 Clean Sheet — Risco do 0x1")
+                cs1, cs2 = st.columns(2)
+                with cs1:
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    cs_home = results["home"]["clean_sheet_pct"]
+                    st.metric(f"Clean Sheet — {m_data['Home']}", f"{cs_home:.1f}%")
+                    st.caption("% de jogos em que o mandante não sofreu gol. Quanto maior, menor o risco de o visitante marcar.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                with cs2:
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    cs_away = results["away"]["clean_sheet_pct"]
+                    st.metric(f"Clean Sheet — {m_data['Away']}", f"{cs_away:.1f}%")
+                    st.caption("% de jogos em que o visitante não sofreu gol. Quanto maior, maior o risco de ele manter o 0x1.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                # HEAD-TO-HEAD
+                st.markdown("---")
+                st.subheader("⚔️ Head-to-Head (H2H)")
+                if h2h_stats:
+                    h2h_col1, h2h_col2 = st.columns([1, 2])
+                    with h2h_col1:
+                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                        st.write(f"**Total de confrontos:** {h2h_stats['total']}")
+                        st.write(f"**Placar 0x1:** {h2h_stats['score_0x1']} ({h2h_stats['score_0x1_pct']:.1f}%)")
+                        st.write(f"**Placar 1x0:** {h2h_stats['score_1x0']} ({(h2h_stats['score_1x0'] / h2h_stats['total']) * 100:.1f}%)")
+                        st.write(f"**Placar 0x0:** {h2h_stats['score_0x0']} ({(h2h_stats['score_0x0'] / h2h_stats['total']) * 100:.1f}%)")
+                        cs_risk = "🔴 Alto" if h2h_stats["score_0x1_pct"] > 10 else "🟡 Moderado" if h2h_stats["score_0x1_pct"] > 5 else "🟢 Baixo"
+                        st.write(f"**Risco H2H 0x1:** {cs_risk}")
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    with h2h_col2:
+                        h2h_scores_df = pd.DataFrame(
+                            list(h2h_stats["top_scores"].items()),
+                            columns=["Placar FT", "Freq %"],
+                        ).sort_values("Freq %", ascending=False)
+                        fig_h2h = px.bar(
+                            h2h_scores_df,
+                            x="Placar FT",
+                            y="Freq %",
+                            text_auto=".1f",
+                            color="Freq %",
+                            color_continuous_scale="Viridis",
+                            template="plotly_dark",
+                            title="Placares Mais Frequentes no H2H",
+                        )
+                        fig_h2h.update_layout(height=300, showlegend=False)
+                        st.plotly_chart(fig_h2h, use_container_width=True)
+                else:
+                    st.info("Nenhum confronto direto encontrado no histórico.")
+
+                # PROBABILIDADE DE GOL POR INTERVALO DE 15 MINUTOS
+                st.markdown("---")
+                st.subheader("⏱️ Probabilidade de Gol por Intervalo de 15 Minutos")
+                interval_stats = get_goal_interval_stats(df_hist, m_data["Home"], m_data["Away"])
+
+                tab_int_h, tab_int_a = st.tabs([f"🏠 {m_data['Home']}", f"🚀 {m_data['Away']}"])
+
+                def render_interval_chart(attack_data, combined_data, team_name, sample):
+                    intervals_labels = list(attack_data.keys())
+                    fig_int = go.Figure()
+                    fig_int.add_trace(
+                        go.Bar(
+                            x=intervals_labels,
+                            y=list(attack_data.values()),
+                            name="Gols Marcados",
+                            marker_color="#00ff88",
+                        ),
+                    )
+                    fig_int.add_trace(
+                        go.Bar(
+                            x=intervals_labels,
+                            y=list(combined_data.values()),
+                            name="Qualquer Gol na Partida",
+                            marker_color="#4a9eff",
+                            opacity=0.7,
+                        ),
+                    )
+                    fig_int.update_layout(
+                        title=f"{team_name} — % de jogos com gol no intervalo (amostra: {sample} jogos)",
+                        xaxis_title="Intervalo",
+                        yaxis_title="% de Jogos",
+                        template="plotly_dark",
+                        barmode="group",
+                        height=380,
+                    )
+                    st.plotly_chart(fig_int, use_container_width=True)
+
+                with tab_int_h:
+                    render_interval_chart(
+                        interval_stats["home_attack"],
+                        interval_stats["home_combined"],
+                        m_data["Home"],
+                        interval_stats["home_sample"],
+                    )
+                with tab_int_a:
+                    render_interval_chart(
+                        interval_stats["away_attack"],
+                        interval_stats["away_combined"],
+                        m_data["Away"],
+                        interval_stats["away_sample"],
+                    )
+
+                st.caption("**Gols Marcados:** % de jogos em que o time analisado marcou naquele intervalo. **Qualquer Gol:** % em que houve pelo menos um gol na partida (qualquer time) naquele intervalo.")
 
                 # DASHBOARD PRINCIPAL (POISSON E VOLATILIDADE)
                 st.markdown("---")
@@ -1458,7 +1647,6 @@ with main_tab:
                     - **Primeiro Gol (Individual):** Média de quando o time faz seu primeiro gol.
                     - **Primeiro Gol (Partida):** Média de quando sai o primeiro gol do jogo (qualquer time).
                     - **Cenário 0x0 HT:** Foco total no comportamento das equipes no segundo tempo quando o placar está travado.
-                    - **CLV (Closing Line Value):** Mede o valor da sua aposta comparando a odd que você pegou com a odd de fechamento. Um CLV positivo significa que você venceu o mercado.
                     """)
                 else:
                     st.warning("Dados de minutagem insuficientes para este confronto.")
@@ -1473,10 +1661,15 @@ with main_tab:
                     st.write(
                         f"**Custo do Gol (Eficiência):** {results['home']['cost']:.3f}",
                     )
+                    norm_h = normalize_team_name(m_data["Home"])
+                    h_goals = results["h_games"].apply(
+                        lambda r: r["Goals_H_FT"] if normalize_team_name(r["Home"]) == norm_h else r["Goals_A_FT"],
+                        axis=1,
+                    )
                     fig_h = go.Figure()
                     fig_h.add_trace(
                         go.Scatter(
-                            y=results["h_games"]["Goals_H_FT"],
+                            y=h_goals,
                             mode="lines+markers",
                             name="Gols",
                             line=dict(color="#00ff88"),
@@ -1494,10 +1687,15 @@ with main_tab:
                     st.write(
                         f"**Custo do Gol (Eficiência):** {results['away']['cost']:.3f}",
                     )
+                    norm_a = normalize_team_name(m_data["Away"])
+                    a_goals = results["a_games"].apply(
+                        lambda r: r["Goals_A_FT"] if normalize_team_name(r["Away"]) == norm_a else r["Goals_H_FT"],
+                        axis=1,
+                    )
                     fig_a = go.Figure()
                     fig_a.add_trace(
                         go.Scatter(
-                            y=results["a_games"]["Goals_A_FT"],
+                            y=a_goals,
                             mode="lines+markers",
                             name="Gols",
                             line=dict(color="#ff4b4b"),
