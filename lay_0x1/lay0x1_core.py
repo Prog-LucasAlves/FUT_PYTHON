@@ -9,18 +9,10 @@ from scipy.stats import poisson
 def normalize_team_name(name):
     if pd.isna(name):
         return ""
-    name = str(name).lower()
+    name = str(name).lower().strip()
     name = "".join(c for c in unicodedata.normalize("NFD", name) if unicodedata.category(c) != "Mn")
-    name = name.replace("se ", " ").replace("sc ", " ").replace("ec ", " ").replace("cr ", " ").replace("fc ", " ").replace("as ", " ").replace("us ", " ").replace("afc ", " ").replace("rcd ", " ").replace("rc ", " ").replace("cf ", " ").replace("cd ", " ")
-    name = name.replace(" fc", " ").replace(" cf", " ").replace(" afc", " ").replace(" cfc", " ").replace(" sc", " ").replace(" ac", " ").replace(" ud", " ")
-    name = name.replace(" rj", " ").replace(" sp", " ").replace(" mg", " ").replace(" pr", " ").replace(" go", " ").replace(" ba", " ").replace(" rs", " ")
-    name = name.replace("atl. ", "atletico ").replace("atl ", "atletico ")
-    name = name.replace("ath. ", "athletic ").replace("ath ", "athletic ")
-    name = name.replace("int. ", "inter ").replace("int ", "inter ")
-    name = name.replace("st. ", "saint ").replace("st ", "saint ")
-    name = name.replace("man city", "mancity")
-    name = name.replace("man utd", "manunited")
-    name = name.replace("utd", "united")
+    name = re.sub(r"[\.\-_/]", " ", name)
+    name = re.sub(r"\s+", " ", name).strip()
     return re.sub(r"[^a-z0-9]", "", name)
 
 
@@ -346,6 +338,142 @@ def analyze_goal_timing(df_games, home_team, away_team, normalize_team_name_fn=n
     return stats_h, stats_a, stats_combined_scores
 
 
+def build_team_role_profile(df_games, team_name, role, normalize_team_name_fn=normalize_team_name):
+    team_norm = normalize_team_name_fn(team_name)
+    role_col = "Norm_Home" if role == "home" else "Norm_Away"
+    games = df_games[df_games[role_col] == team_norm].copy()
+    if games.empty:
+        return {
+            "sample_size": 0,
+            "wins": 0,
+            "draws": 0,
+            "losses": 0,
+            "points": 0,
+            "ppg_season": 0.0,
+            "ppg_last_10": 0.0,
+            "ppg_last_5": 0.0,
+            "goals_for": 0,
+            "goals_against": 0,
+            "avg_goals_for": 0.0,
+            "avg_goals_against": 0.0,
+            "first_goal": {},
+        }
+
+    games = games.sort_values("Date", ascending=False).copy()
+
+    def get_team_scores(row):
+        if role == "home":
+            gf = int(row["Goals_H_FT"])
+            ga = int(row["Goals_A_FT"])
+            mins_for = row["Min_Goals_H"] if isinstance(row["Min_Goals_H"], list) else []
+            mins_against = row["Min_Goals_A"] if isinstance(row["Min_Goals_A"], list) else []
+        else:
+            gf = int(row["Goals_A_FT"])
+            ga = int(row["Goals_H_FT"])
+            mins_for = row["Min_Goals_A"] if isinstance(row["Min_Goals_A"], list) else []
+            mins_against = row["Min_Goals_H"] if isinstance(row["Min_Goals_H"], list) else []
+        return gf, ga, mins_for, mins_against
+
+    score_data = games.apply(get_team_scores, axis=1)
+    goals_for = score_data.apply(lambda x: x[0])
+    goals_against = score_data.apply(lambda x: x[1])
+
+    result_series = goals_for.combine(goals_against, lambda gf, ga: "W" if gf > ga else "D" if gf == ga else "L")
+    points_series = result_series.map({"W": 3, "D": 1, "L": 0})
+
+    def ppg(subset):
+        return float(points_series.loc[subset.index].mean()) if not subset.empty else 0.0
+
+    def first_goal_flags(row):
+        gf, ga, mins_for, mins_against = get_team_scores(row)
+        team_first = None
+        opp_first = None
+        if mins_for:
+            team_minutes = [m for m in (normalize_goal_minute(x) for x in mins_for) if m is not None]
+            if team_minutes:
+                team_first = min(team_minutes)
+        if mins_against:
+            opp_minutes = [m for m in (normalize_goal_minute(x) for x in mins_against) if m is not None]
+            if opp_minutes:
+                opp_first = min(opp_minutes)
+        if team_first is None and opp_first is None:
+            return {
+                "scored_first": False,
+                "suffered_first": False,
+                "scored_first_won": False,
+                "scored_first_draw": False,
+                "scored_first_lost": False,
+                "suffered_first_won": False,
+                "suffered_first_draw": False,
+                "suffered_first_lost": False,
+                "scored_first_ht": False,
+                "scored_first_ht_won": False,
+            }
+        scored_first = team_first is not None and (opp_first is None or team_first < opp_first)
+        suffered_first = opp_first is not None and (team_first is None or opp_first < team_first)
+        won = gf > ga
+        draw = gf == ga
+        lost = gf < ga
+        scored_first_ht = scored_first and team_first <= 45
+        return {
+            "scored_first": scored_first,
+            "suffered_first": suffered_first,
+            "scored_first_won": scored_first and won,
+            "scored_first_draw": scored_first and draw,
+            "scored_first_lost": scored_first and lost,
+            "suffered_first_won": suffered_first and won,
+            "suffered_first_draw": suffered_first and draw,
+            "suffered_first_lost": suffered_first and lost,
+            "scored_first_ht": scored_first_ht,
+            "scored_first_ht_won": scored_first_ht and won,
+        }
+
+    first_goal_df = games.apply(first_goal_flags, axis=1, result_type="expand")
+    total_games = len(games)
+    wins = int((result_series == "W").sum())
+    draws = int((result_series == "D").sum())
+    losses = int((result_series == "L").sum())
+    points = int(points_series.sum())
+
+    recent_10 = games.head(10)
+    recent_5 = games.head(5)
+    first_goal_scored = first_goal_df["scored_first"]
+    first_goal_suffered = first_goal_df["suffered_first"]
+    first_goal_scored_count = int(first_goal_scored.sum())
+    first_goal_suffered_count = int(first_goal_suffered.sum())
+    first_goal_ht = first_goal_df["scored_first_ht"]
+
+    def pct(num, den=total_games):
+        return (float(num) / den * 100) if den else 0.0
+
+    return {
+        "sample_size": total_games,
+        "wins": wins,
+        "draws": draws,
+        "losses": losses,
+        "points": points,
+        "ppg_season": (points / total_games) if total_games else 0.0,
+        "ppg_last_10": ppg(recent_10),
+        "ppg_last_5": ppg(recent_5),
+        "goals_for": int(goals_for.sum()),
+        "goals_against": int(goals_against.sum()),
+        "avg_goals_for": float(goals_for.mean()),
+        "avg_goals_against": float(goals_against.mean()),
+        "first_goal": {
+            "scored_first_pct": pct(first_goal_scored_count),
+            "scored_first_won_pct": pct(first_goal_df["scored_first_won"].sum()),
+            "scored_first_draw_pct": pct(first_goal_df["scored_first_draw"].sum()),
+            "scored_first_lost_pct": pct(first_goal_df["scored_first_lost"].sum()),
+            "suffered_first_pct": pct(first_goal_suffered_count),
+            "suffered_first_won_pct": pct(first_goal_df["suffered_first_won"].sum()),
+            "suffered_first_draw_pct": pct(first_goal_df["suffered_first_draw"].sum()),
+            "suffered_first_lost_pct": pct(first_goal_df["suffered_first_lost"].sum()),
+            "first_goal_first_half_pct": pct(first_goal_ht.sum()),
+            "first_goal_first_half_won_pct": pct(first_goal_df["scored_first_ht_won"].sum()),
+        },
+    }
+
+
 def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, normalize_team_name_fn=normalize_team_name):
     norm_h = normalize_team_name_fn(home_team)
     norm_a = normalize_team_name_fn(away_team)
@@ -450,6 +578,8 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
     stats_a = get_stats(away_a, norm_a)
     last10_home = get_last_10_team_summary(df_games, home_team, (0, 1), normalize_team_name_fn)
     last10_away = get_last_10_team_summary(df_games, away_team, (0, 1), normalize_team_name_fn)
+    role_profile_home = build_team_role_profile(df_games, home_team, "home", normalize_team_name_fn)
+    role_profile_away = build_team_role_profile(df_games, away_team, "away", normalize_team_name_fn)
     lay01_index_home, lay01_var_home = calculate_lay_strength_index(stats_h)
     lay01_index_away, lay01_var_away = calculate_lay_strength_index(stats_a)
     prob_h0 = poisson.pmf(0, stats_h["mean"])
@@ -498,7 +628,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
     if 0 < odd_btts < 1.90:
         score += 2
         reasons.append(f"Odd BTTS baixa ({odd_btts:.2f}): Tendência de ambos marcarem")
-    if 0 < odd_over25 < 2.10:
+    if 0 < odd_over25 < 1.90:
         score += 1
         reasons.append(f"Odd Over 2.5 baixa ({odd_over25:.2f}): Expectativa de gols")
     if stats_h["variance"] > 1.0:
@@ -534,6 +664,8 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
         "away": stats_a,
         "last10_home": last10_home,
         "last10_away": last10_away,
+        "role_profile_home": role_profile_home,
+        "role_profile_away": role_profile_away,
         "lay_strength_home": lay01_index_home,
         "lay_strength_away": lay01_index_away,
         "lay_strength_home_label": classify_strength(lay01_index_home),
