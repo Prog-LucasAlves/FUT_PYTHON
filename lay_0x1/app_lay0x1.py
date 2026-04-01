@@ -1,5 +1,3 @@
-import ast
-import os
 from pathlib import Path
 
 import lay0x1_core
@@ -8,220 +6,32 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from app_config import DEFAULT_DATE, UNKNOWN_TEAMS_LOG_FILE
+from bet_tracker_utils import (
+    build_bet_label,
+    calculate_lay_liability,
+    calculate_lay_result,
+    load_lay_bets,
+    save_lay_bets,
+    style_bets_dataframe,
+)
+from data_utils import (
+    load_historical_data,
+    load_resolved_unknown_team_names,
+    load_unknown_team_names,
+    save_resolved_unknown_team_names,
+)
+from data_utils import (
+    load_today_games as load_today_games_raw,
+)
+from notes_utils import load_notes, new_note_id, save_note_attachment, save_notes
 from scipy.stats import poisson
+from ui_constants import BET_STATUS_OPTIONS, NOTE_PRIORITY_OPTIONS, NOTE_STATUS_OPTIONS
 
 # Configuração da Página
 st.set_page_config(page_title="Lay 0x1 PRO - FutStats", page_icon="📈", layout="wide")
 
-CURRENT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = CURRENT_DIR.parent
-CACHE_VERSION = "2026-03-29-team-aliases-v11"
-BETS_TRACKER_FILE = CURRENT_DIR / "bets_lay_tracker.csv"
-DEFAULT_DATE = pd.Timestamp.today().normalize().date()
-BET_STATUS_OPTIONS = ["", "Green", "75min"]
-
-# Mapeamento explícito FootyStats → Betfair (nomes canônicos)
-FOOTYSTATS_TEAM_MAP = {
-    "Roma": "AS Roma",
-    "AFC Bournemouth": "Bournemouth",
-    "Almería": "Almeria",
-    "América Mineiro": "America Mineiro",
-    "Angers SCO": "Angers",
-    "Athletic Club Bilbao": "Ath Bilbao",
-    "Atlético GO": "Atletico GO",
-    "Atlético Madrid": "Atl. Madrid",
-    "Atlético PR": "Athletico-PR",
-    "Bayern München": "Bayern Munich",
-    "Boavista FC": "Boavista",
-    "Borussia Dortmund": "Dortmund",
-    "Borussia M'gladbach": "B. Monchengladbach",
-    "Botafogo": "Botafogo RJ",
-    "Brighton & Hove Albion": "Brighton",
-    "CA Osasuna": "Osasuna",
-    "CD Nacional": "Nacional",
-    "CD Tondela": "Tondela",
-    "Ceará": "Ceara",
-    "Celta de Vigo": "Celta Vigo",
-    "Chapecoense": "Chapecoense-SC",
-    "Criciúma": "Criciuma",
-    "Cuiabá": "Cuiaba",
-    "Cádiz": "Cadiz CF",
-    "Darmstadt 98": "Darmstadt",
-    "Deportivo Alavés": "Alaves",
-    "Elche CF": "Elche",
-    "Estrela Amadora": "Estrela",
-    "FC Arouca": "Arouca",
-    "FC Barcelona": "Barcelona",
-    "FC Vizela": "Vizela",
-    "Famalicão": "Famalicao",
-    "Flamengo": "Flamengo RJ",
-    "GD Chaves": "Chaves",
-    "GD Estoril Praia": "Estoril",
-    "Getafe CF": "Getafe",
-    "Girona FC": "Girona",
-    "Grêmio": "Gremio",
-    "Hellas Verona": "Verona",
-    "Inter Milan": "Inter",
-    "Ipswich Town": "Ipswich",
-    "Köln": "FC Koln",
-    "Leeds United": "Leeds",
-    "Leganés": "Leganes",
-    "Leicester City": "Leicester",
-    "Levante UD": "Levante",
-    "Luton Town": "Luton",
-    "Mainz 05": "Mainz",
-    "Manchester United": "Manchester Utd",
-    "Moreirense FC": "Moreirense",
-    "Newcastle United": "Newcastle",
-    "Nottingham Forest": "Nottingham",
-    "Olympique Lyonnais": "Lyon",
-    "Olympique Marseille": "Marseille",
-    "Paris": "Paris FC",
-    "Porto": "FC Porto",
-    "RCD Espanyol": "Espanyol",
-    "RCD Mallorca": "Mallorca",
-    "Real Betis": "Betis",
-    "Real Oviedo": "R. Oviedo",
-    "Real Valladolid": "Valladolid",
-    "Rio Ave FC": "Rio Ave",
-    "Saint-Étienne": "St Etienne",
-    "Sevilla FC": "Sevilla",
-    "Sheffield United": "Sheffield Utd",
-    "Sporting Braga": "Braga",
-    "Sporting CP": "Sporting CP",
-    "São Paulo": "Sao Paulo",
-    "Tottenham Hotspur": "Tottenham",
-    "UD Las Palmas": "Las Palmas",
-    "Valencia CF": "Valencia",
-    "Vasco da Gama": "Vasco",
-    "Vitória": "Vitoria",
-    "Vitória Guimarães": "Vitoria Guimaraes",
-    "West Ham United": "West Ham",
-    "Wolverhampton Wanderers": "Wolves",
-}
-
-
 normalize_team_name = lay0x1_core.normalize_team_name
-
-
-def load_lay_bets():
-    expected_cols = [
-        "data",
-        "mandante",
-        "visitante",
-        "hora",
-        "mercado",
-        "odd_entrada",
-        "valor_aposta",
-        "responsabilidade",
-        "entrada",
-        "saida",
-        "odd_saida_75min",
-        "resultado",
-        "percentual_resultado",
-    ]
-    if os.path.exists(BETS_TRACKER_FILE):
-        df = pd.read_csv(BETS_TRACKER_FILE)
-        for col in expected_cols:
-            if col not in df.columns:
-                df[col] = np.nan
-        df = df[expected_cols].copy()
-        df["saida"] = df["saida"].fillna("")
-        df["data"] = pd.to_datetime(df["data"], errors="coerce").dt.date.astype("string")
-        df["hora"] = df["hora"].fillna("").astype(str)
-        df["mercado"] = df["mercado"].fillna("").astype(str)
-        df["percentual_resultado"] = np.where(
-            df["responsabilidade"].fillna(0) > 0,
-            (df["resultado"] / df["responsabilidade"]) * 100,
-            np.nan,
-        )
-        df = df.drop_duplicates(subset=["data", "mandante", "visitante", "hora", "mercado"], keep="last").reset_index(drop=True)
-        return df
-    return pd.DataFrame(columns=expected_cols)
-
-
-def save_lay_bets(df_bets):
-    df_bets = df_bets.copy()
-    if not df_bets.empty:
-        df_bets = df_bets.drop_duplicates(subset=["data", "mandante", "visitante", "hora", "mercado"], keep="last")
-        df_bets = df_bets.sort_values(by=["data", "hora", "mandante", "visitante"], ascending=[False, False, True, True])
-    df_bets.to_csv(BETS_TRACKER_FILE, index=False)
-
-
-def calculate_lay_liability(odd_entrada, valor_aposta):
-    return valor_aposta * max(odd_entrada - 1, 0)
-
-
-def calculate_lay_result(odd_entrada, valor_aposta, saida, odd_saida_75min):
-    if saida == "Green":
-        return valor_aposta
-    if saida == "75min" and odd_saida_75min and odd_saida_75min > 0:
-        # Hedge teórico para fechar a posição no mesmo resultado líquido em ambos os lados.
-        hedge_back_stake = (odd_entrada * valor_aposta) / odd_saida_75min
-        return valor_aposta - hedge_back_stake
-    return np.nan
-
-
-def build_bet_label(row_idx, row):
-    return f"#{row_idx} | {row['data']} {row['hora']} | {row['mandante']} vs {row['visitante']} | {row['mercado']}"
-
-
-def style_bets_dataframe(df_bets):
-    display_columns = [
-        "Data",
-        "Mandante",
-        "Visitante",
-        "Hora",
-        "Mercado",
-        "Odd Entrada",
-        "Stake (R$)",
-        "Responsabilidade (R$)",
-        "Tipo de Entrada",
-        "Saida",
-        "Odd Saida 75min",
-        "Resultado (R$)",
-        "Performance %",
-    ]
-    df_display = df_bets.copy().rename(
-        columns={
-            "data": "Data",
-            "mandante": "Mandante",
-            "visitante": "Visitante",
-            "hora": "Hora",
-            "mercado": "Mercado",
-            "odd_entrada": "Odd Entrada",
-            "valor_aposta": "Stake (R$)",
-            "responsabilidade": "Responsabilidade (R$)",
-            "entrada": "Tipo de Entrada",
-            "saida": "Saida",
-            "odd_saida_75min": "Odd Saida 75min",
-            "resultado": "Resultado (R$)",
-            "percentual_resultado": "Performance %",
-        },
-    )
-    df_display = df_display[display_columns]
-
-    def color_performance(value):
-        if pd.isna(value):
-            return ""
-        if value > 0:
-            return "color: #00ff88; font-weight: bold;"
-        if value < 0:
-            return "color: #ff4b4b; font-weight: bold;"
-        return "color: #ffcc00; font-weight: bold;"
-
-    formatters = {
-        "Odd Entrada": "{:.2f}",
-        "Stake (R$)": "R$ {:.2f}",
-        "Responsabilidade (R$)": "R$ {:.2f}",
-        "Odd Saida 75min": lambda x: "" if pd.isna(x) else f"{x:.2f}",
-        "Resultado (R$)": lambda x: "" if pd.isna(x) else f"R$ {x:.2f}",
-        "Performance %": lambda x: "" if pd.isna(x) else f"{x:+.1f}%",
-    }
-    return df_display.style.format(formatters).map(color_performance, subset=["Resultado (R$)", "Performance %"])
-
-
-build_risk_plan = lay0x1_core.build_risk_plan
 
 
 # Estilo Customizado Profissional
@@ -251,131 +61,9 @@ st.markdown(
 
 
 # Funções de Carregamento de Dados
-@st.cache_data(ttl=3599)
-def load_data(_cache_version=CACHE_VERSION):
-    merged_path = PROJECT_ROOT / "data_total" / "dados_historico.csv"
-    hist_path = PROJECT_ROOT / "data_total" / "dados_betfair.csv"
-    footy_path = PROJECT_ROOT / "data_total" / "dados_footystats.csv"
-
-    # Preferir arquivo pré-processado (dados_historico.csv) se disponível
-    source_path = merged_path if merged_path.exists() else hist_path
-
-    if source_path.exists():
-        df = pd.read_csv(source_path, sep=";")
-        df["Date"] = pd.to_datetime(df["Date"])
-        df = df.dropna(subset=["Goals_H_FT", "Goals_A_FT"])
-
-        # Criar nomes normalizados imediatamente para garantir o match em qualquer cenário
-        df["Norm_Home"] = df["Home"].apply(normalize_team_name)
-        df["Norm_Away"] = df["Away"].apply(normalize_team_name)
-
-        # Merge com FootyStats quando o arquivo existir e os campos ainda não estiverem presentes.
-        if footy_path.exists():
-            try:
-                df_footy = pd.read_csv(footy_path, sep=";")
-                df_footy["Date"] = pd.to_datetime(df_footy["Date"])
-
-                # Aplicar mapeamento explícito de nomes antes de normalizar
-                df_footy["Home"] = df_footy["Home"].replace(FOOTYSTATS_TEAM_MAP)
-                df_footy["Away"] = df_footy["Away"].replace(FOOTYSTATS_TEAM_MAP)
-
-                # Selecionar colunas relevantes do FootyStats
-                cols_to_merge = [
-                    "Date",
-                    "Home",
-                    "Away",
-                    "xG_H",
-                    "xG_A",
-                    "PPG_H_Pre",
-                    "PPG_A_Pre",
-                    "Possession_H",
-                    "Possession_A",
-                    "DangerousAttacks_H",
-                    "DangerousAttacks_A",
-                    "Shots_H",
-                    "Shots_A",
-                    "ShotsOnTarget_H",
-                    "ShotsOnTarget_A",
-                    "Corners_H",
-                    "Corners_A",
-                ]
-                # Filtrar colunas que realmente existem
-                cols_to_merge = [c for c in cols_to_merge if c in df_footy.columns]
-
-                # Normalizar nomes para o merge
-                df_footy["Norm_Home"] = df_footy["Home"].apply(normalize_team_name)
-                df_footy["Norm_Away"] = df_footy["Away"].apply(normalize_team_name)
-
-                # Remover Home/Away de cols_to_merge para evitar colunas duplicadas no merge
-                cols_to_merge_filtered = [c for c in cols_to_merge if c not in ["Home", "Away"]]
-
-                footy_subset = df_footy[cols_to_merge_filtered + ["Norm_Home", "Norm_Away"]].copy()
-                footy_subset = footy_subset.drop_duplicates(subset=["Date", "Norm_Home", "Norm_Away"], keep="last")
-
-                missing_footy_cols = [c for c in cols_to_merge_filtered if c not in df.columns]
-                if source_path == hist_path or missing_footy_cols:
-                    df = pd.merge(df, footy_subset, on=["Date", "Norm_Home", "Norm_Away"], how="left")
-            except Exception as e:
-                st.sidebar.warning(f"Erro ao mesclar FootyStats: {e}")
-
-        # Converter colunas de minutos para listas reais
-        def parse_minutes(x):
-            try:
-                if pd.isna(x) or x == "" or x == "[]":
-                    return []
-                if isinstance(x, list):
-                    return x
-                return ast.literal_eval(x)
-            except:
-                return []
-
-        df["Min_Goals_H"] = df["Min_Goals_H"].apply(parse_minutes)
-        df["Min_Goals_A"] = df["Min_Goals_A"].apply(parse_minutes)
-
-        return df
-    return pd.DataFrame()
-
-
-@st.cache_data(ttl=600)
-def load_today_games(_cache_version=CACHE_VERSION):
-    data_day_dir = PROJECT_ROOT / "data_day"
-    if data_day_dir.exists():
-        # Listar arquivos e ordenar por data de modificação (mais recentes primeiro)
-        files = [f for f in os.listdir(data_day_dir) if f.endswith(".csv") and f.startswith("dados_day_betfair")]
-        if files:
-            # Ordenar arquivos para que os mais novos (geralmente mais completos) venham primeiro
-            files.sort(
-                key=lambda x: os.path.getmtime(os.path.join(data_day_dir, x)),
-                reverse=True,
-            )
-
-            df_list = []
-            for file in files:
-                try:
-                    df_temp = pd.read_csv(os.path.join(data_day_dir, file), sep=";")
-                    df_list.append(df_temp)
-                except:
-                    pass
-            if df_list:
-                df = pd.concat(df_list, ignore_index=True)
-                df["Date"] = pd.to_datetime(df["Date"])
-
-                # Priorizar linhas com mais dados (menos zeros) antes de remover duplicatas
-                # Contar quantos valores não são zero nas colunas de odds principais
-                odds_cols = [c for c in df.columns if "Odd_" in c]
-                df["non_zero_count"] = (df[odds_cols] > 0).sum(axis=1)
-                df = df.sort_values("non_zero_count", ascending=False)
-
-                df = df.drop_duplicates(subset=["Date", "Home", "Away"], keep="first")
-                df = df.drop(columns=["non_zero_count"])
-
-                # Adicionar nomes normalizados para busca robusta
-                df["Norm_Home"] = df["Home"].apply(normalize_team_name)
-                df["Norm_Away"] = df["Away"].apply(normalize_team_name)
-                df["Match"] = df["Home"].astype(str) + " vs " + df["Away"].astype(str)
-
-                return df
-    return pd.DataFrame()
+load_data = st.cache_data(ttl=3599)(load_historical_data)
+load_today_games = st.cache_data(ttl=600)(load_today_games_raw)
+build_risk_plan = lay0x1_core.build_risk_plan
 
 
 # Funções Utilitárias de Formatação
@@ -498,7 +186,7 @@ calculate_pro_metrics = lay0x1_core.calculate_pro_metrics
 
 # Interface
 st.title("🛡️ Lay 0x1 Ultimate - Professional Trading Tool")
-main_tab, bets_tab = st.tabs(["🛡️ Lay 0x1 Ultimate", "🧾 Planilha"])
+main_tab, bets_tab, notes_tab = st.tabs(["🛡️ Lay 0x1 Ultimate", "🧾 Planilha", "🗒️ Notas"])
 
 df_hist = load_data()
 df_today = load_today_games()
@@ -516,6 +204,35 @@ date_selected = st.sidebar.date_input(
 
 leagues = sorted(df_hist["League"].unique().tolist())
 selected_leagues = st.sidebar.multiselect("Ligas", leagues, default=leagues[:5])
+
+with st.sidebar.expander("Nomes desconhecidos", expanded=False):
+    df_unknown_teams = load_unknown_team_names(limit=30)
+    if df_unknown_teams.empty:
+        st.caption("Nenhum nome novo foi registrado.")
+    else:
+        st.dataframe(df_unknown_teams, use_container_width=True, hide_index=True)
+        action_col1, action_col2, action_col3 = st.columns(3)
+        with action_col1:
+            if st.button("Marcar resolvido", use_container_width=True):
+                current = load_resolved_unknown_team_names()
+                current.extend(df_unknown_teams["name"].astype(str).tolist())
+                save_resolved_unknown_team_names(current)
+                st.success("Nomes marcados como resolvidos.")
+                st.rerun()
+        with action_col2:
+            csv_export = df_unknown_teams.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "Exportar CSV",
+                data=csv_export,
+                file_name="nomes_desconhecidos.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with action_col3:
+            if st.button("Limpar log", use_container_width=True):
+                UNKNOWN_TEAMS_LOG_FILE.write_text("", encoding="utf-8")
+                st.success("Log limpo com sucesso.")
+                st.rerun()
 
 with main_tab:
     if not df_today.empty:
@@ -1293,6 +1010,293 @@ with bets_tab:
             st.write(f"Melhor base %: {roi_liability:+.1f}% sobre responsabilidade")
             st.write("Mercado dominante: Lay 0x1")
             st.markdown("</div>", unsafe_allow_html=True)
+
+with notes_tab:
+    st.subheader("🗒️ Bloco de Notas")
+    st.caption("Tudo aqui é salvo automaticamente em arquivo local dentro da pasta `lay_0x1`.")
+    df_notes = load_notes()
+
+    top_left, top_right = st.columns([2, 1])
+    with top_left:
+        quick_note = st.text_input("Nota rápida", placeholder="Ex.: 0x0 forte no jogo de hoje")
+    with top_right:
+        quick_tag = st.text_input("Tag rápida", placeholder="Ex.: live, estudo")
+
+    quick_a, quick_b, quick_c = st.columns(3)
+    with quick_a:
+        quick_priority = st.selectbox("Prioridade rápida", NOTE_PRIORITY_OPTIONS, index=1, key="quick_priority")
+    with quick_b:
+        quick_status = st.selectbox("Status rápido", NOTE_STATUS_OPTIONS, index=0, key="quick_status")
+    with quick_c:
+        quick_pin = st.checkbox("Fixar rápido", value=True, key="quick_pin")
+    quick_image = st.file_uploader(
+        "Printscreen rápido",
+        type=["png", "jpg", "jpeg", "webp"],
+        key="quick_image",
+    )
+
+    if st.button("Registrar nota rápida", use_container_width=True):
+        if quick_note.strip():
+            now = pd.Timestamp.now().isoformat(timespec="seconds")
+            note_id = new_note_id()
+            quick_row = pd.DataFrame(
+                [
+                    {
+                        "id": note_id,
+                        "created_at": now,
+                        "updated_at": now,
+                        "title": quick_note.strip()[:60],
+                        "note": quick_note.strip(),
+                        "tag": quick_tag.strip(),
+                        "priority": quick_priority,
+                        "status": quick_status,
+                        "pinned": bool(quick_pin),
+                        "image_path": save_note_attachment(quick_image, note_id) if quick_image is not None else "",
+                    },
+                ],
+            )
+            df_notes = pd.concat([df_notes, quick_row], ignore_index=True)
+            save_notes(df_notes)
+            st.success("Nota rápida registrada.")
+            st.rerun()
+        else:
+            st.warning("Escreva ao menos o texto da nota rápida.")
+
+    st.markdown("---")
+    f1, f2, f3, f4 = st.columns([1.2, 1.2, 1, 1])
+    with f1:
+        search_text = st.text_input("Buscar", placeholder="título ou conteúdo")
+    with f2:
+        filter_tag = st.text_input("Filtrar tag", placeholder="ex.: live")
+    with f3:
+        filter_priority = st.selectbox("Filtrar prioridade", ["Todas"] + NOTE_PRIORITY_OPTIONS, index=0)
+    with f4:
+        filter_status = st.selectbox("Filtrar status", ["Todos"] + NOTE_STATUS_OPTIONS, index=0)
+
+    if not df_notes.empty:
+        filtered_notes = df_notes.copy()
+        if search_text.strip():
+            text_mask = filtered_notes["title"].astype(str).str.contains(search_text, case=False, na=False) | filtered_notes["note"].astype(str).str.contains(search_text, case=False, na=False)
+            filtered_notes = filtered_notes[text_mask]
+        if filter_tag.strip():
+            filtered_notes = filtered_notes[filtered_notes["tag"].astype(str).str.contains(filter_tag, case=False, na=False)]
+        if filter_priority != "Todas":
+            filtered_notes = filtered_notes[filtered_notes["priority"] == filter_priority]
+        if filter_status != "Todos":
+            filtered_notes = filtered_notes[filtered_notes["status"] == filter_status]
+
+        filtered_notes = filtered_notes.sort_values(
+            by=["pinned", "updated_at", "priority"],
+            ascending=[False, False, True],
+        ).reset_index(drop=True)
+
+        cstats1, cstats2, cstats3, cstats4 = st.columns(4)
+        with cstats1:
+            st.metric("Total", len(df_notes))
+        with cstats2:
+            st.metric("Filtradas", len(filtered_notes))
+        with cstats3:
+            st.metric("Fixadas", int(df_notes["pinned"].sum()))
+        with cstats4:
+            st.metric("Urgentes", int((df_notes["priority"] == "Urgente").sum()))
+
+        if filtered_notes.empty:
+            st.info("Nenhuma nota encontrada com os filtros atuais.")
+        else:
+            st.markdown("### 📌 Cartões")
+            for _, row in filtered_notes.iterrows():
+                priority_colors = {
+                    "Baixa": "#6c757d",
+                    "Média": "#4a9eff",
+                    "Alta": "#ff9f1c",
+                    "Urgente": "#ff4b4b",
+                }
+                card_border = priority_colors.get(str(row["priority"]), "#4a9eff")
+                pinned_label = "Fixada" if bool(row["pinned"]) else "Normal"
+                st.markdown(
+                    f"""
+                    <div style="
+                        background: linear-gradient(145deg, #1e2130, #161924);
+                        border: 1px solid {card_border};
+                        border-left: 8px solid {card_border};
+                        border-radius: 14px;
+                        padding: 16px 18px;
+                        margin-bottom: 12px;
+                        box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+                    ">
+                        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
+                            <div>
+                                <div style="font-size:1.05rem; font-weight:700; color:#ffffff;">{row["title"] or "Sem título"}</div>
+                                <div style="color:#a9b4c3; margin-top:4px;">{row["note"] or "Sem conteúdo"} </div>
+                            </div>
+                            <div style="text-align:right; color:#d8deea; min-width:150px;">
+                                <div><strong>Prioridade:</strong> {row["priority"]}</div>
+                                <div><strong>Status:</strong> {row["status"]}</div>
+                                <div><strong>Tag:</strong> {row["tag"] or "-"}</div>
+                                <div><strong>Topo:</strong> {pinned_label}</div>
+                            </div>
+                        </div>
+                        <div style="margin-top:10px; color:#8c97a8; font-size:0.82rem;">
+                            Criada em {row["created_at"]} | Atualizada em {row["updated_at"]}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                image_path = str(row.get("image_path", "")).strip()
+                if image_path and Path(image_path).exists():
+                    st.image(image_path, caption="Printscreen anexado", use_container_width=True)
+    else:
+        st.info("Nenhuma nota criada ainda.")
+
+    st.markdown("---")
+    st.subheader("✍️ Nova Nota")
+    c1, c2, c3 = st.columns([2, 1, 1])
+    with c1:
+        new_title = st.text_input("Título", placeholder="Ex.: Jogo com risco alto no 1T")
+    with c2:
+        new_tag = st.text_input("Tag", placeholder="Ex.: risco, live, estudo")
+    with c3:
+        new_priority = st.selectbox("Prioridade", NOTE_PRIORITY_OPTIONS, index=1)
+
+    n1, n2 = st.columns([2, 1])
+    with n1:
+        new_note = st.text_area("Conteúdo", placeholder="Escreva sua leitura, gatilhos, dúvidas e planos...", height=160)
+    with n2:
+        new_status = st.selectbox("Status", NOTE_STATUS_OPTIONS, index=0)
+        new_pinned = st.checkbox("Fixar no topo", value=False)
+        new_image = st.file_uploader(
+            "Anexar printscreen",
+            type=["png", "jpg", "jpeg", "webp"],
+            key="new_note_image",
+        )
+
+    add_col, clear_col = st.columns(2)
+    with add_col:
+        if st.button("Salvar Nota", use_container_width=True):
+            if new_title.strip() or new_note.strip():
+                now = pd.Timestamp.now().isoformat(timespec="seconds")
+                note_id = new_note_id()
+                new_row = pd.DataFrame(
+                    [
+                        {
+                            "id": note_id,
+                            "created_at": now,
+                            "updated_at": now,
+                            "title": new_title.strip(),
+                            "note": new_note.strip(),
+                            "tag": new_tag.strip(),
+                            "priority": new_priority,
+                            "status": new_status,
+                            "pinned": bool(new_pinned),
+                            "image_path": save_note_attachment(new_image, note_id) if new_image is not None else "",
+                        },
+                    ],
+                )
+                df_notes = pd.concat([df_notes, new_row], ignore_index=True)
+                save_notes(df_notes)
+                st.success("Nota salva com sucesso.")
+                st.rerun()
+            else:
+                st.warning("Preencha pelo menos o título ou o conteúdo da nota.")
+    with clear_col:
+        if st.button("Limpar Campos", use_container_width=True):
+            st.rerun()
+
+    if not df_notes.empty:
+        st.markdown("---")
+        st.subheader("🛠️ Editar Notas")
+        editable_order = df_notes.sort_values(by=["pinned", "updated_at"], ascending=[False, False]).reset_index(drop=True)
+        note_options = {f"{idx + 1}. {row['title'] or 'Sem título'} | {row['priority']} | {row['status']}": row["id"] for idx, row in editable_order.iterrows()}
+        selected_note_label = st.selectbox("Selecionar nota", list(note_options.keys()))
+        selected_note_id = note_options[selected_note_label]
+        selected_idx = df_notes.index[df_notes["id"] == selected_note_id][0]
+        selected_note = df_notes.loc[selected_idx]
+
+        e1, e2, e3 = st.columns(3)
+        with e1:
+            edit_title = st.text_input("Título da nota", value=str(selected_note["title"]))
+        with e2:
+            edit_tag = st.text_input("Tag da nota", value=str(selected_note["tag"]))
+        with e3:
+            edit_priority = st.selectbox(
+                "Prioridade da nota",
+                NOTE_PRIORITY_OPTIONS,
+                index=NOTE_PRIORITY_OPTIONS.index(str(selected_note["priority"])) if str(selected_note["priority"]) in NOTE_PRIORITY_OPTIONS else 1,
+            )
+
+        s1, s2 = st.columns(2)
+        with s1:
+            edit_status = st.selectbox(
+                "Status da nota",
+                NOTE_STATUS_OPTIONS,
+                index=NOTE_STATUS_OPTIONS.index(str(selected_note["status"])) if str(selected_note["status"]) in NOTE_STATUS_OPTIONS else 0,
+            )
+        with s2:
+            edit_pinned = st.checkbox("Fixada no topo", value=bool(selected_note["pinned"]))
+
+        edit_note = st.text_area("Conteúdo da nota", value=str(selected_note["note"]), height=180)
+
+        current_image_path = str(selected_note.get("image_path", "")).strip()
+        if current_image_path and Path(current_image_path).exists():
+            st.image(current_image_path, caption="Printscreen atual", use_container_width=True)
+
+        edit_image = st.file_uploader(
+            "Trocar printscreen",
+            type=["png", "jpg", "jpeg", "webp"],
+            key=f"edit_note_image_{selected_note_id}",
+        )
+
+        a1, a2, a3 = st.columns(3)
+        with a1:
+            if st.button("Salvar Alterações", use_container_width=True):
+                if edit_image is not None:
+                    saved_image_path = save_note_attachment(edit_image, selected_note_id)
+                    df_notes.loc[selected_idx, "image_path"] = saved_image_path
+                df_notes.loc[selected_idx, "title"] = edit_title.strip()
+                df_notes.loc[selected_idx, "tag"] = edit_tag.strip()
+                df_notes.loc[selected_idx, "priority"] = edit_priority
+                df_notes.loc[selected_idx, "status"] = edit_status
+                df_notes.loc[selected_idx, "pinned"] = bool(edit_pinned)
+                df_notes.loc[selected_idx, "note"] = edit_note.strip()
+                df_notes.loc[selected_idx, "updated_at"] = pd.Timestamp.now().isoformat(timespec="seconds")
+                save_notes(df_notes)
+                st.success("Nota atualizada com sucesso.")
+                st.rerun()
+        with a2:
+            if st.button("Remover Printscreen", use_container_width=True):
+                old_image_path = str(df_notes.loc[selected_idx, "image_path"]).strip()
+                if old_image_path:
+                    try:
+                        old_path = Path(old_image_path)
+                        if old_path.exists():
+                            old_path.unlink()
+                    except OSError:
+                        pass
+                df_notes.loc[selected_idx, "image_path"] = ""
+                df_notes.loc[selected_idx, "updated_at"] = pd.Timestamp.now().isoformat(timespec="seconds")
+                save_notes(df_notes)
+                st.success("Printscreen removido com sucesso.")
+                st.rerun()
+        with a3:
+            if st.button("Duplicar Nota", use_container_width=True):
+                now = pd.Timestamp.now().isoformat(timespec="seconds")
+                dup_row = selected_note.copy()
+                dup_row["id"] = new_note_id()
+                dup_row["created_at"] = now
+                dup_row["updated_at"] = now
+                dup_row["title"] = f"Cópia de {dup_row['title']}" if str(dup_row["title"]).strip() else "Cópia da nota"
+                df_notes = pd.concat([df_notes, pd.DataFrame([dup_row])], ignore_index=True)
+                save_notes(df_notes)
+                st.success("Nota duplicada com sucesso.")
+                st.rerun()
+        delete_col, _ = st.columns([1, 2])
+        with delete_col:
+            if st.button("Excluir Nota", use_container_width=True):
+                df_notes = df_notes.drop(index=selected_idx).reset_index(drop=True)
+                save_notes(df_notes)
+                st.success("Nota excluída com sucesso.")
+                st.rerun()
 
 # Rodapé
 st.markdown("---")
