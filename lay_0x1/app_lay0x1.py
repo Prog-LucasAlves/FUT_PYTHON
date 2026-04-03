@@ -25,8 +25,26 @@ from data_utils import (
     load_today_games as load_today_games_raw,
 )
 from notes_utils import load_notes, new_note_id, save_note_attachment, save_notes
-from scipy.stats import poisson
 from ui_constants import BET_STATUS_OPTIONS, NOTE_PRIORITY_OPTIONS, NOTE_STATUS_OPTIONS
+from ui_helpers import (
+    display_scores,
+    render_audit_section,
+    render_badge,
+    render_callout,
+    render_edit_note_form,
+    render_exec_summary,
+    render_interval_chart,
+    render_kpi_comparison,
+    render_last10_card,
+    render_metric_card,
+    render_new_note_form,
+    render_note_card,
+    render_poisson_time_block,
+    render_role_profile,
+    render_section_header,
+    render_stat_grid,
+    render_variance_section,
+)
 
 # Configuração da Página
 st.set_page_config(page_title="Lay 0x1 PRO - FutStats", page_icon="📈", layout="wide")
@@ -129,116 +147,13 @@ st.markdown(
 
 # Funções de Carregamento de Dados
 load_data = st.cache_data(ttl=3599)(load_historical_data)
-load_today_games = st.cache_data(ttl=600)(load_today_games_raw)
+load_today_games = load_today_games_raw
 build_risk_plan = lay0x1_core.build_risk_plan
 
 
 # Funções Utilitárias de Formatação
 format_minutes = lay0x1_core.format_minutes
-
-
-def get_last_10_team_summary(df_games, team_name, target_score):
-    team_norm = normalize_team_name(team_name)
-    team_games = df_games[(df_games["Norm_Home"] == team_norm) | (df_games["Norm_Away"] == team_norm)].copy()
-    if team_games.empty:
-        return {
-            "form_sequence": "Sem jogos",
-            "record": "0V 0E 0D",
-            "points": 0,
-            "max_points": 0,
-            "win_rate": 0.0,
-            "target_score_count": 0,
-            "games_analyzed": 0,
-        }
-
-    team_games = team_games.sort_values("Date", ascending=False).head(10).copy()
-
-    def summarize_match(row):
-        if row["Norm_Home"] == team_norm:
-            goals_for = int(row["Goals_H_FT"])
-            goals_against = int(row["Goals_A_FT"])
-        else:
-            goals_for = int(row["Goals_A_FT"])
-            goals_against = int(row["Goals_H_FT"])
-
-        if goals_for > goals_against:
-            result = "V"
-            points = 3
-        elif goals_for == goals_against:
-            result = "E"
-            points = 1
-        else:
-            result = "D"
-            points = 0
-
-        return goals_for, goals_against, result, points
-
-    summaries = team_games.apply(summarize_match, axis=1)
-    goals_for = summaries.apply(lambda x: x[0])
-    goals_against = summaries.apply(lambda x: x[1])
-    results = summaries.apply(lambda x: x[2])
-    points = summaries.apply(lambda x: x[3])
-
-    wins = int((results == "V").sum())
-    draws = int((results == "E").sum())
-    losses = int((results == "D").sum())
-    total_points = int(points.sum())
-    total_games = len(team_games)
-    max_points = total_games * 3
-
-    def build_ht_scenario_summary(df, ht_score):
-        # Filtrar jogos em que o placar HT, do ponto de vista do time analisado,
-        # é ht_score[0] (gols pró) x ht_score[1] (gols contra)
-        def match_ht_score(row):
-            if row["Norm_Home"] == team_norm:
-                return row["Goals_H_HT"] == ht_score[0] and row["Goals_A_HT"] == ht_score[1]
-            else:
-                return row["Goals_A_HT"] == ht_score[0] and row["Goals_H_HT"] == ht_score[1]
-
-        scenario_games = df[df.apply(match_ht_score, axis=1)].copy()
-        if scenario_games.empty:
-            return {
-                "total": 0,
-                "home_goal_to_75": 0,
-                "away_goal_to_75": 0,
-                "stayed_score_to_75": 0,
-                "changed_score_to_75": 0,
-            }
-
-        def score_until_75(row):
-            # Retorna (gols_pro_time, gols_contra_time) até o minuto 75
-            if row["Norm_Home"] == team_norm:
-                return count_goals_until(row["Min_Goals_H"], 75), count_goals_until(row["Min_Goals_A"], 75)
-            else:
-                return count_goals_until(row["Min_Goals_A"], 75), count_goals_until(row["Min_Goals_H"], 75)
-
-        scores_75 = scenario_games.apply(score_until_75, axis=1)
-        team_scores_75 = scores_75.apply(lambda x: x[0])
-        opp_scores_75 = scores_75.apply(lambda x: x[1])
-
-        stayed_mask = (team_scores_75 == ht_score[0]) & (opp_scores_75 == ht_score[1])
-
-        return {
-            "total": int(len(scenario_games)),
-            "home_goal_to_75": int((team_scores_75 > ht_score[0]).sum()),
-            "away_goal_to_75": int((opp_scores_75 > ht_score[1]).sum()),
-            "stayed_score_to_75": int(stayed_mask.sum()),
-            "changed_score_to_75": int((~stayed_mask).sum()),
-        }
-
-    return {
-        "form_sequence": " | ".join(results.tolist()),
-        "record": f"{wins}V {draws}E {losses}D",
-        "points": total_points,
-        "max_points": max_points,
-        "win_rate": (wins / total_games) * 100 if total_games > 0 else 0.0,
-        "target_score_count": int(((goals_for == target_score[0]) & (goals_against == target_score[1])).sum()),
-        "games_analyzed": total_games,
-        "ht_00": build_ht_scenario_summary(team_games, (0, 0)),
-        "ht_01": build_ht_scenario_summary(team_games, (0, 1)),
-    }
-
-
+get_last_10_team_summary = lay0x1_core.get_last_10_team_summary
 normalize_goal_minute = lay0x1_core.normalize_goal_minute
 count_goals_until = lay0x1_core.count_goals_until
 count_goals_after = lay0x1_core.count_goals_after
@@ -246,8 +161,6 @@ get_h2h_stats = lay0x1_core.get_h2h_stats
 get_goal_interval_stats = lay0x1_core.get_goal_interval_stats
 build_poisson_timing_scenario = lay0x1_core.build_poisson_timing_scenario
 analyze_goal_timing = lay0x1_core.analyze_goal_timing
-
-
 calculate_pro_metrics = lay0x1_core.calculate_pro_metrics
 
 
@@ -270,7 +183,7 @@ date_selected = st.sidebar.date_input(
 )
 
 leagues = sorted(df_hist["League"].unique().tolist())
-selected_leagues = st.sidebar.multiselect("Ligas", leagues, default=leagues[:5])
+selected_leagues = st.sidebar.multiselect("Ligas", leagues, default=[])
 
 with st.sidebar.expander("Nomes desconhecidos", expanded=False):
     df_unknown_teams = load_unknown_team_names(limit=30)
@@ -300,6 +213,16 @@ with st.sidebar.expander("Nomes desconhecidos", expanded=False):
                 UNKNOWN_TEAMS_LOG_FILE.write_text("", encoding="utf-8")
                 st.success("Log limpo com sucesso.")
                 st.rerun()
+
+with st.sidebar.expander("Diagnóstico jogos do dia", expanded=False):
+    if df_today.empty:
+        st.caption("df_today está vazio.")
+    else:
+        st.dataframe(
+            df_today[["Date", "Home", "Away", "Match"]].head(10),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 with main_tab:
     if not df_today.empty:
@@ -470,6 +393,7 @@ with main_tab:
 
                 with res_col:
                     color = "#00ff88" if "FORTE" in results["recommendation"] else "#ffcc00" if "MODERADA" in results["recommendation"] else "#ff4b4b"
+                    recommendation_badge = "ok" if color == "#00ff88" else "warn" if color == "#ffcc00" else "bad"
                     st.markdown(
                         f"""
                         <div class="metric-card" style="border-left: 5px solid {color}; color: black; text-align: center;">
@@ -480,6 +404,7 @@ with main_tab:
                     """,
                         unsafe_allow_html=True,
                     )
+                    render_badge(results["recommendation"], recommendation_badge)
 
                 with reasons_col:
                     st.markdown('<div class="strategy-card">', unsafe_allow_html=True)
@@ -503,28 +428,37 @@ with main_tab:
 
                 r1, r2, r3 = st.columns(3)
                 with r1:
-                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.success("REGRA DE SAÍDA PRIMÁRIA")
-                    st.write(f"**Hedge alvo:** {risk_plan['adjusted_exit']}'")
-                    st.write(f"**Base histórica:** {risk_plan['base_exit']}'")
-                    st.write(f"**Confiança da amostra:** {risk_plan['confidence']}")
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    render_callout(
+                        "success",
+                        "REGRA DE SAÍDA PRIMÁRIA",
+                        [
+                            f"Hedge alvo: {risk_plan['adjusted_exit']}'",
+                            f"Base histórica: {risk_plan['base_exit']}'",
+                            f"Confiança da amostra: {risk_plan['confidence']}",
+                        ],
+                    )
 
                 with r2:
-                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.warning("ZONA DE DECISÃO")
-                    st.write(f"**Faixa de risco:** {risk_plan['risk_band']}")
-                    st.write("**0x0:** manter até o alvo, se houver pressão e o jogo estiver vivo.")
-                    st.write("**0x1 no HT:** stop loss antecipado, não insistir no rolo do mercado.")
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    render_callout(
+                        "warning",
+                        "ZONA DE DECISÃO",
+                        [
+                            f"Faixa de risco: {risk_plan['risk_band']}",
+                            "0x0: manter até o alvo, se houver pressão e o jogo estiver vivo.",
+                            "0x1 no HT: stop loss antecipado, não insistir no rolo do mercado.",
+                        ],
+                    )
 
                 with r3:
-                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.error("STOP LOSS OPERACIONAL")
-                    st.write("**Se o jogo travar:** reduzir antes do limite.")
-                    st.write("**Se a odd fugir:** não esperar melhora artificial.")
-                    st.write("**Se o mandante não pressionar:** sair antes do alvo.")
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    render_callout(
+                        "error",
+                        "STOP LOSS OPERACIONAL",
+                        [
+                            "Se o jogo travar: reduzir antes do limite.",
+                            "Se a odd fugir: não esperar melhora artificial.",
+                            "Se o mandante não pressionar: sair antes do alvo.",
+                        ],
+                    )
 
                 st.info(
                     f"""
@@ -595,36 +529,6 @@ with main_tab:
 
                 tab_int_h, tab_int_a = st.tabs([f"🏠 {m_data['Home']}", f"🚀 {m_data['Away']}"])
 
-                def render_interval_chart(attack_data, combined_data, team_name, sample):
-                    intervals_labels = list(attack_data.keys())
-                    fig_int = go.Figure()
-                    fig_int.add_trace(
-                        go.Bar(
-                            x=intervals_labels,
-                            y=list(attack_data.values()),
-                            name="Gols Marcados",
-                            marker_color="#00ff88",
-                        ),
-                    )
-                    fig_int.add_trace(
-                        go.Bar(
-                            x=intervals_labels,
-                            y=list(combined_data.values()),
-                            name="Qualquer Gol na Partida",
-                            marker_color="#4a9eff",
-                            opacity=0.7,
-                        ),
-                    )
-                    fig_int.update_layout(
-                        title=f"{team_name} — jogos com gol no intervalo (amostra: {sample})",
-                        xaxis_title="Intervalo",
-                        yaxis_title="% de Jogos",
-                        template="plotly_dark",
-                        barmode="group",
-                        height=380,
-                    )
-                    st.plotly_chart(fig_int, use_container_width=True)
-
                 with tab_int_h:
                     render_interval_chart(
                         interval_stats["home_attack"],
@@ -648,53 +552,72 @@ with main_tab:
                 c1, c2, c3, c4 = st.columns(4)
                 with c1:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.metric(f"{results['poisson_0x1_label']}", f"{results['poisson_0x1']:.2f}%")
-                    st.write(f"{results['heuristic_success_label']}: {results['heuristic_success']:.1f}%")
-                    st.caption("Leitura heurística, não probabilidade calibrada.")
+                    st.metric("0x0 FT", f"{100 - results['poisson_0x1']:.2f}%")
+                    st.write(f"{results['poisson_0x1_label']}")
+                    st.caption("Leitura de placar final sem 0x1.")
                     st.markdown("</div>", unsafe_allow_html=True)
                 with c2:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.write("**Cenário: 0x0 no HT**")
-                    st.write(f"Risco de Red: {results['red_from_00']:.1f}%")
-                    st.info("Chance de o 0-0 sobreviver ao 2º tempo.")
+                    st.write("**Heurística Poisson - 0x0 HT**")
+                    st.write(f"0x0 até o HT: {results['red_from_00']:.1f}%")
+                    st.caption("Probabilidade heurística de chegar ao intervalo sem gol.")
                     st.markdown("</div>", unsafe_allow_html=True)
                 with c3:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.write("**Médias Ofensivas (xG)**")
-                    st.write(f"Home xG: {results['home']['avg_xg']:.2f}")
-                    st.write(f"Away xG: {results['away']['avg_xg']:.2f}")
+                    st.write("**Heurística Poisson - 0x1 HT**")
+                    st.write(f"0x1 antes do HT: {results['heuristic_success']:.1f}%")
+                    st.caption("Complemento heurístico da chance de sair 0x1 antes do intervalo.")
                     st.markdown("</div>", unsafe_allow_html=True)
                 with c4:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.write("**Domínio de Campo (PPG)**")
-                    st.write(f"Home PPG: {results['home']['avg_ppg']:.2f}")
-                    st.write(f"Away PPG: {results['away']['avg_ppg']:.2f}")
+                    st.write("**Heurística Poisson - Leitura final**")
+                    st.write(f"Score do Sinal: {results['score']}/{results['max_score']}")
+                    st.write(f"Recomendação: {results['recommendation']}")
+                    st.caption("Resumo de Heurística Poisson para 0x0 FT, 0x0 HT e 0x1 HT.")
                     st.markdown("</div>", unsafe_allow_html=True)
+
+                signal_color = "#00ff88" if results["poisson_0x1"] >= 18 else "#ffd56a" if results["poisson_0x1"] >= 10 else "#ff4b4b"
+                st.markdown(
+                    f"""
+                    <div class="metric-card" style="border-left: 5px solid {signal_color};">
+                        <div class="section-kicker">Leitura prática</div>
+                        <div class="panel-title">Como interpretar o cenário</div>
+                        <div style="margin:0.15rem 0 0.35rem 0;">Heurística Poisson para 0x0 HT: jogo tende a chegar zerado ao intervalo.</div>
+                        <div style="margin:0.15rem 0 0.35rem 0;">Heurística Poisson para 0x1 HT: jogo pode encaixar cedo no padrão esperado.</div>
+                        <span class="badge {"ok" if results["poisson_0x1"] >= 18 else "warn" if results["poisson_0x1"] >= 10 else "bad"}">0x0 FT: {100 - results["poisson_0x1"]:.2f}%</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
                 st.markdown("---")
                 st.markdown('<div class="section-kicker">Modelos e projeções</div><div class="section-heading">Índice de Força FootyStats - Lay 0x1</div>', unsafe_allow_html=True)
                 s1, s2 = st.columns(2)
                 with s1:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.metric(f"Índice Anti-0x1 - {m_data['Home']}", f"{results['lay_strength_home']:.1f}")
-                    st.write(f"Classificação: **{results['lay_strength_home_label']}**")
-                    st.caption("Elite/Forte: perfil muito favorável | Moderado: pede confirmação | Baixo: risco maior de placar magro.")
-                    st.write("Foco em pressão ofensiva, evitar zero gol e sustentar jogo aberto.")
+                    st.markdown(f'<div class="panel-title">{m_data["Home"]}</div>', unsafe_allow_html=True)
+                    st.metric("Índice Anti-0x1", f"{results['lay_strength_home']:.1f}")
+                    home_strength_badge = "ok" if "Forte" in results["lay_strength_home_label"] or "Elite" in results["lay_strength_home_label"] else "warn" if "Moderado" in results["lay_strength_home_label"] else "bad"
+                    render_badge(results["lay_strength_home_label"], home_strength_badge)
+                    st.caption("Força ofensiva e chance de sustentar um jogo aberto.")
                     st.markdown("---")
-                    st.metric("Variância do Índice (Mandante)", f"{results['lay_var_home']:.1f}")
-                    st.write(f"Consistência: **{results['lay_var_home_label']}**")
-                    st.caption(results["lay_var_home_desc"])
+                    st.metric("Variância", f"{results['lay_var_home']:.1f}")
+                    var_home_badge = "ok" if "Baixa" in results["lay_var_home_label"] else "warn" if "Média" in results["lay_var_home_label"] else "bad"
+                    render_badge(results["lay_var_home_label"], var_home_badge)
+                    st.caption("Consistência do perfil.")
                     st.markdown("</div>", unsafe_allow_html=True)
                 with s2:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.metric(f"Índice Anti-0x1 - {m_data['Away']}", f"{results['lay_strength_away']:.1f}")
-                    st.write(f"Classificação: **{results['lay_strength_away_label']}**")
-                    st.caption("Elite/Forte: perfil muito favorável | Moderado: pede confirmação | Baixo: risco maior de placar magro.")
-                    st.write("Leitura da capacidade do visitante participar de um jogo menos estático.")
+                    st.markdown(f'<div class="panel-title">{m_data["Away"]}</div>', unsafe_allow_html=True)
+                    st.metric("Índice Anti-0x1", f"{results['lay_strength_away']:.1f}")
+                    away_strength_badge = "ok" if "Forte" in results["lay_strength_away_label"] or "Elite" in results["lay_strength_away_label"] else "warn" if "Moderado" in results["lay_strength_away_label"] else "bad"
+                    render_badge(results["lay_strength_away_label"], away_strength_badge)
+                    st.caption("Capacidade de manter o jogo menos travado.")
                     st.markdown("---")
-                    st.metric("Variância do Índice (Visitante)", f"{results['lay_var_away']:.1f}")
-                    st.write(f"Consistência: **{results['lay_var_away_label']}**")
-                    st.caption(results["lay_var_away_desc"])
+                    st.metric("Variância", f"{results['lay_var_away']:.1f}")
+                    var_away_badge = "ok" if "Baixa" in results["lay_var_away_label"] else "warn" if "Média" in results["lay_var_away_label"] else "bad"
+                    render_badge(results["lay_var_away_label"], var_away_badge)
+                    st.caption("Consistência do perfil.")
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 st.markdown("---")
@@ -713,69 +636,6 @@ with main_tab:
                     unsafe_allow_html=True,
                 )
 
-                def render_exec_summary(home_profile, away_profile, home_last10, away_last10):
-                    st.markdown('<div class="section-kicker">Resumo Executivo</div><div class="section-heading">Leitura rápida do confronto</div>', unsafe_allow_html=True)
-                    c1, c2, c3, c4 = st.columns(4)
-                    cards = [
-                        (c1, "📅 Jogos", f"{home_profile['sample_size']} / {away_profile['sample_size']}", "ok"),
-                        (c2, "⚡ PPG", f"{home_profile['ppg_season']:.2f} / {away_profile['ppg_season']:.2f}", "info"),
-                        (c3, "🥅 Gols", f"{home_profile['goals_for']} / {away_profile['goals_for']}", "warn"),
-                        (c4, "🎯 1º Gol", f"{home_profile['first_goal']['scored_first_pct']:.1f}% / {away_profile['first_goal']['scored_first_pct']:.1f}%", "ok"),
-                    ]
-                    for col, title, value, badge in cards:
-                        with col:
-                            st.metric(title, value)
-                            st.markdown(f'<span class="badge {badge}">executivo</span>', unsafe_allow_html=True)
-                    st.caption(f"Base histórica: `dados_historicos.csv` | Últimos 10: {home_last10['record']} vs {away_last10['record']}")
-                    st.caption("Leituras de 1º gol dependem da precisão dos minutos registrados em `Min_Goals_H` e `Min_Goals_A`.")
-
-                    home_score = round(
-                        (home_profile["ppg_season"] * 25) + (home_profile["first_goal"]["scored_first_pct"] * 0.45) + (home_profile["goals_for"] / max(home_profile["sample_size"], 1)),
-                        1,
-                    )
-                    away_score = round(
-                        (away_profile["ppg_season"] * 25) + (away_profile["first_goal"]["scored_first_pct"] * 0.45) + (away_profile["goals_for"] / max(away_profile["sample_size"], 1)),
-                        1,
-                    )
-                    score_gap = abs(home_score - away_score)
-                    if score_gap >= 6:
-                        score_label, score_color = "Confortável", "ok"
-                    elif score_gap >= 3:
-                        score_label, score_color = "Moderado", "warn"
-                    else:
-                        score_label, score_color = "Aperto", "info"
-                    st.markdown(
-                        f"""
-                        <div class="metric-card" style="border-left: 5px solid {"#00ff88" if score_color == "ok" else "#ffd56a" if score_color == "warn" else "#4a9eff"};">
-                            <div class="section-kicker">Score Executivo</div>
-                            <div class="hero-score">{home_score:.1f} x {away_score:.1f}</div>
-                            <span class="badge {score_color}">{score_label}</span>
-                            <span class="badge info">Semáforo automático</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                def render_last10_card(last10, team_name, accent_color):
-                    spark_map = {"V": "█", "E": "▇", "D": "▁"}
-                    sparkline = "".join(spark_map.get(x, "·") for x in last10["form_sequence"].replace(" | ", ""))
-                    st.markdown(
-                        f"""
-                        <div class="metric-card" style="border-left: 5px solid {accent_color};">
-                            <div class="section-kicker" style="margin-bottom:0.25rem;">Últimos 10 jogos</div>
-                            <h4 style="margin:0 0 8px 0;">{team_name}</h4>
-                            <p style="margin:0;"><b>Forma:</b> {last10["form_sequence"]}</p>
-                            <p style="margin:0;"><b>Campanha:</b> {last10["record"]}</p>
-                            <p style="margin:0;"><b>Pontos:</b> {last10["points"]}/{last10["max_points"]} | <b>Win rate:</b> {last10["win_rate"]:.1f}%</p>
-                            <p style="margin:0;"><b>0x1 FT:</b> {last10["target_score_count"]} em {last10["games_analyzed"]} jogos</p>
-                            <p style="margin:0;"><b>Spark:</b> <span style="letter-spacing:0.14em;">{sparkline}</span></p>
-                            <p style="margin:0;"><b>0x0 HT -> 75':</b> {last10["ht_00"]["stayed_score_to_75"]} estáveis | {last10["ht_00"]["changed_score_to_75"]} mudaram</p>
-                            <p style="margin:0;"><b>0x1 HT -> 75':</b> {last10["ht_01"]["stayed_score_to_75"]} estáveis | {last10["ht_01"]["changed_score_to_75"]} mudaram</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
                 render_exec_summary(results["role_profile_home"], results["role_profile_away"], results["last10_home"], results["last10_away"])
 
                 c_last_home, c_last_away = st.columns(2)
@@ -786,278 +646,53 @@ with main_tab:
 
                 st.markdown("### 📋 Mandante x Visitante")
 
-                def render_role_profile(profile, team_name, role_label, accent_color):
-                    first_goal = profile["first_goal"]
-                    role_kicker = "Mandante" if role_label.lower().startswith("mand") else "Visitante"
-                    st.markdown(
-                        f"""
-                        <div class="metric-card" style="border-left: 5px solid {accent_color};">
-                            <div class="section-kicker">Perfil histórico</div>
-                            <div class="section-heading" style="margin-bottom:0.5rem;">📌 {team_name} - {role_label}</div>
-                            <span class="badge ok">Histórico</span>
-                            <span class="badge info">Base: dados_historicos.csv</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                    s1, s2 = st.columns(2)
-                    stat_cards = [
-                        (s1, "Jogos", profile["sample_size"], "ok"),
-                        (s2, "Vitórias", profile["wins"], "ok"),
-                    ]
-                    for col, label, value, badge in stat_cards:
-                        with col:
-                            st.metric(label, f"{value:.2f}" if isinstance(value, (int, float)) else value)
-                            st.markdown(f'<span class="badge {badge}">{role_kicker}</span>', unsafe_allow_html=True)
-                    sg1, sg2, sg3 = st.columns(3)
-                    quick_cards = [
-                        (sg1, "PPG", profile["ppg_season"], "info"),
-                        (sg2, "Gols pró", profile["goals_for"], "ok"),
-                        (sg3, "Gols contra", profile["goals_against"], "warn"),
-                    ]
-                    for col, label, value, badge in quick_cards:
-                        with col:
-                            st.metric(label, f"{value:.2f}" if isinstance(value, (int, float)) else value)
-                            st.markdown(f'<span class="badge {badge}">{role_kicker}</span>', unsafe_allow_html=True)
-                    with st.expander("1º Gol", expanded=False):
-                        fg_cols = st.columns(2)
-                        fg_left = [
-                            ("Marcou 1º gol", first_goal["scored_first_pct"]),
-                            ("Marcou 1º gol e venceu", first_goal["scored_first_won_pct"]),
-                            ("Marcou 1º gol e empatou", first_goal["scored_first_draw_pct"]),
-                            ("Marcou 1º gol e perdeu", first_goal["scored_first_lost_pct"]),
-                            ("Sofreu 1º gol", first_goal["suffered_first_pct"]),
-                        ]
-                        fg_right = [
-                            ("Sofreu 1º gol e venceu", first_goal["suffered_first_won_pct"]),
-                            ("Sofreu 1º gol e empatou", first_goal["suffered_first_draw_pct"]),
-                            ("Sofreu 1º gol e perdeu", first_goal["suffered_first_lost_pct"]),
-                            ("Marcou no 1º tempo", first_goal["first_goal_first_half_pct"]),
-                            ("Marcou no 1º tempo e venceu", first_goal["first_goal_first_half_won_pct"]),
-                        ]
-                        with fg_cols[0]:
-                            for label, value in fg_left:
-                                st.write(f"{label}: {value:.1f}%")
-                                st.progress(min(max(value / 100.0, 0.0), 1.0))
-                        with fg_cols[1]:
-                            for label, value in fg_right:
-                                st.write(f"{label}: {value:.1f}%")
-                                st.progress(min(max(value / 100.0, 0.0), 1.0))
-                        if profile["sample_size"] > 0 and first_goal["scored_first_pct"] == 0.0:
-                            st.info("Observação: 0.0% em 'marcou 1º gol' pode ocorrer quando o time não abriu o placar no recorte ou quando os minutos do gol estão incompletos.")
-
-                def render_kpi_comparison(title, home_value, away_value, home_label, away_label, fmt="{:.2f}"):
-                    st.markdown(f'<div class="section-kicker">{title}</div>', unsafe_allow_html=True)
-                    left, right = st.columns(2)
-                    max_value = max(float(home_value) if isinstance(home_value, (int, float)) else 0, float(away_value) if isinstance(away_value, (int, float)) else 0, 1.0)
-                    with left:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.markdown(f"**{home_label}**")
-                        st.write(fmt.format(home_value) if isinstance(home_value, (int, float)) else home_value)
-                        st.progress(min(max((float(home_value) if isinstance(home_value, (int, float)) else 0) / max_value, 0.0), 1.0))
-                        st.markdown("</div>", unsafe_allow_html=True)
-                    with right:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.markdown(f"**{away_label}**")
-                        st.write(fmt.format(away_value) if isinstance(away_value, (int, float)) else away_value)
-                        st.progress(min(max((float(away_value) if isinstance(away_value, (int, float)) else 0) / max_value, 0.0), 1.0))
-                        st.markdown("</div>", unsafe_allow_html=True)
-                    st.markdown("")
-
                 st.markdown('<div class="section-kicker">Perfil Mandante x Visitante</div><div class="section-heading">Comparativo estrutural</div>', unsafe_allow_html=True)
                 rp_home, rp_away = st.columns(2)
                 with rp_home:
-                    render_role_profile(results["role_profile_home"], m_data["Home"], "Mandante", "#00ff88")
+                    render_role_profile(results["role_profile_home"], m_data["Home"], "Mandante", "#00ff88", results["home"]["avg_xg"])
                 with rp_away:
-                    render_role_profile(results["role_profile_away"], m_data["Away"], "Visitante", "#4a9eff")
+                    render_role_profile(results["role_profile_away"], m_data["Away"], "Visitante", "#4a9eff", results["away"]["avg_xg"])
 
-                st.markdown('<div class="section-kicker">Comparação Visual</div><div class="section-heading">KPIs lado a lado</div>', unsafe_allow_html=True)
+                render_section_header("Comparação Visual", "KPIs lado a lado")
                 kpi_cols = st.columns(3)
                 with kpi_cols[0]:
-                    render_kpi_comparison("PPG da temporada", results["role_profile_home"]["ppg_season"], results["role_profile_away"]["ppg_season"], m_data["Home"], m_data["Away"])
-                with kpi_cols[1]:
                     render_kpi_comparison("Gols marcados", results["role_profile_home"]["goals_for"], results["role_profile_away"]["goals_for"], m_data["Home"], m_data["Away"], fmt="{:.0f}")
+                with kpi_cols[1]:
+                    render_kpi_comparison("Marcou 1º gol", results["role_profile_home"]["first_goal"]["scored_first_pct"], results["role_profile_away"]["first_goal"]["scored_first_pct"], m_data["Home"], m_data["Away"], fmt="{:.1f}%", is_percent=True)
                 with kpi_cols[2]:
-                    render_kpi_comparison("Marcou 1º gol", results["role_profile_home"]["first_goal"]["scored_first_pct"], results["role_profile_away"]["first_goal"]["scored_first_pct"], m_data["Home"], m_data["Away"])
+                    render_kpi_comparison("xG médio", results["home"]["avg_xg"], results["away"]["avg_xg"], m_data["Home"], m_data["Away"], fmt="{:.2f}")
 
-                st.markdown('<div class="section-kicker">Conferência de dados</div><div class="section-heading">Auditoria dos Dados</div>', unsafe_allow_html=True)
                 with st.expander("Ver auditoria detalhada", expanded=False):
-                    audit_rows = []
-                    audit_specs = [
-                        ("Mandante", results["role_profile_home"], m_data["Home"], "home"),
-                        ("Visitante", results["role_profile_away"], m_data["Away"], "away"),
-                    ]
-                    for label, profile, team_name, role in audit_specs:
-                        expected = lay0x1_core.build_team_role_profile(df_hist, team_name, role, normalize_team_name)
-                        audit_rows.extend(
-                            [
-                                {
-                                    "Time": team_name,
-                                    "Contexto": label,
-                                    "Métrica": "Total de jogos",
-                                    "Exibido": profile["sample_size"],
-                                    "Base": expected["sample_size"],
-                                    "Status": "OK" if profile["sample_size"] == expected["sample_size"] else "Divergente",
-                                },
-                                {
-                                    "Time": team_name,
-                                    "Contexto": label,
-                                    "Métrica": "PPG temporada",
-                                    "Exibido": round(profile["ppg_season"], 4),
-                                    "Base": round(expected["ppg_season"], 4),
-                                    "Status": "OK" if round(profile["ppg_season"], 4) == round(expected["ppg_season"], 4) else "Divergente",
-                                },
-                                {
-                                    "Time": team_name,
-                                    "Contexto": label,
-                                    "Métrica": "Gols marcados",
-                                    "Exibido": profile["goals_for"],
-                                    "Base": expected["goals_for"],
-                                    "Status": "OK" if profile["goals_for"] == expected["goals_for"] else "Divergente",
-                                },
-                                {
-                                    "Time": team_name,
-                                    "Contexto": label,
-                                    "Métrica": "Gols sofridos",
-                                    "Exibido": profile["goals_against"],
-                                    "Base": expected["goals_against"],
-                                    "Status": "OK" if profile["goals_against"] == expected["goals_against"] else "Divergente",
-                                },
-                                {
-                                    "Time": team_name,
-                                    "Contexto": label,
-                                    "Métrica": "Marcou 1º gol %",
-                                    "Exibido": round(profile["first_goal"]["scored_first_pct"], 4),
-                                    "Base": round(expected["first_goal"]["scored_first_pct"], 4),
-                                    "Status": "OK" if round(profile["first_goal"]["scored_first_pct"], 4) == round(expected["first_goal"]["scored_first_pct"], 4) else "Divergente",
-                                },
-                            ],
-                        )
-                    audit_df = pd.DataFrame(audit_rows)
-                    audit_df["Semáforo"] = audit_df["Status"].map({"OK": "🟢", "Divergente": "🔴"}).fillna("🟡")
-                    ok_count = int((audit_df["Status"] == "OK").sum()) if not audit_df.empty else 0
-                    total_count = len(audit_df)
-                    st.markdown('<div class="section-kicker">Resumo da auditoria</div>', unsafe_allow_html=True)
-                    divergent_count = total_count - ok_count
-                    coverage = (ok_count / total_count * 100) if total_count else 0.0
-                    st.markdown(
-                        f"""
-                        <div class="compact-panel">
-                            <span class="badge ok">OK: {ok_count}</span>
-                            <span class="badge warn">Divergente: {divergent_count}</span>
-                            <span class="badge info">Total: {total_count}</span>
-                            <span class="badge {"ok" if coverage == 100 else "warn"}">Cobertura: {coverage:.0f}%</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                    if total_count > 0:
-                        st.progress(ok_count / total_count)
-                    st.dataframe(audit_df, use_container_width=True, hide_index=True)
-                    if not audit_df.empty and (audit_df["Status"] == "OK").all():
-                        st.success("Auditoria concluída: os indicadores exibidos batem com o recálculo direto da base histórica.")
-                    else:
-                        st.warning("Auditoria encontrou divergências em pelo menos um indicador. Vale revisar a base ou o filtro aplicado.")
+                    render_audit_section(df_hist, results, m_data["Home"], m_data["Away"], normalize_team_name)
 
                 with st.expander("Eficiência de Finalização", expanded=False):
-                    st.markdown('<div class="section-kicker">Eficiência operacional</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="section-heading">Conversão por finalização</div>', unsafe_allow_html=True)
+                    render_section_header("Eficiência operacional", "Conversão por finalização")
                     col_sh1, col_sh2 = st.columns(2)
                     with col_sh1:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                         home_shots_value = results["home"]["shots_per_goal"]
-                        st.metric(
+                        render_metric_card(
                             f"{results['home']['shots_per_goal_label']} - {m_data['Home']}",
-                            f"{home_shots_value:.1f}" if pd.notna(home_shots_value) else "N/D",
+                            [f"Valor: {home_shots_value:.1f}" if pd.notna(home_shots_value) else "Valor: N/D", results["home"]["shots_per_goal_desc"]],
                         )
-                        st.write(results["home"]["shots_per_goal_desc"])
-                        st.markdown("</div>", unsafe_allow_html=True)
                     with col_sh2:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                         away_shots_value = results["away"]["shots_per_goal"]
-                        st.metric(
+                        render_metric_card(
                             f"{results['away']['shots_per_goal_label']} - {m_data['Away']}",
-                            f"{away_shots_value:.1f}" if pd.notna(away_shots_value) else "N/D",
+                            [f"Valor: {away_shots_value:.1f}" if pd.notna(away_shots_value) else "Valor: N/D", results["away"]["shots_per_goal_desc"]],
                         )
-                        st.write(results["away"]["shots_per_goal_desc"])
-                        st.markdown("</div>", unsafe_allow_html=True)
 
                 with st.expander("Poisson por Tempo Após 75'", expanded=False):
-                    st.markdown('<div class="section-kicker">Distribuição temporal e cenários</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="section-heading">Probabilidade acumulada pós-75"</div>', unsafe_allow_html=True)
+                    render_section_header("Distribuição temporal e cenários", 'Probabilidade acumulada pós-75"')
                     scenario_00_home = build_poisson_timing_scenario(df_hist, m_data["Home"], "home", (0, 0))
                     scenario_00_away = build_poisson_timing_scenario(df_hist, m_data["Away"], "away", (0, 0))
                     scenario_01_home = build_poisson_timing_scenario(df_hist, m_data["Home"], "home", (0, 1))
                     scenario_01_away = build_poisson_timing_scenario(df_hist, m_data["Away"], "away", (0, 1))
 
-                    def render_poisson_time_block(title, home_scenario, away_scenario):
-                        st.markdown(f"#### {title}")
-                        b1, b2 = st.columns(2)
-
-                        with b1:
-                            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                            st.write(f"**{m_data['Home']}**")
-                            if home_scenario:
-                                st.write(f"Cenário: {home_scenario['scenario_label']}")
-                                st.write(f"Amostra: {home_scenario['sample_size']} jogos")
-                                st.write(f"P(gol do mandante até 90'): {home_scenario['prob_home_goal']:.1f}%")
-                                st.write(f"P(gol na partida até 90'): {home_scenario['prob_match_goal']:.1f}%")
-                            else:
-                                st.write("Dados insuficientes para este cenário.")
-                            st.markdown("</div>", unsafe_allow_html=True)
-
-                        with b2:
-                            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                            st.write(f"**{m_data['Away']}**")
-                            if away_scenario:
-                                st.write(f"Cenário: {away_scenario['scenario_label']}")
-                                st.write(f"Amostra: {away_scenario['sample_size']} jogos")
-                                st.write(f"P(gol do visitante até 90'): {away_scenario['prob_away_goal']:.1f}%")
-                                st.write(f"P(gol na partida até 90'): {away_scenario['prob_match_goal']:.1f}%")
-                            else:
-                                st.write("Dados insuficientes para este cenário.")
-                            st.markdown("</div>", unsafe_allow_html=True)
-
-                        fig = go.Figure()
-                        if home_scenario:
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=home_scenario["timeline"]["Minute"],
-                                    y=home_scenario["timeline"]["Match"],
-                                    mode="lines+markers",
-                                    name=f"{m_data['Home']} - Partida",
-                                    line=dict(color="#00ff88"),
-                                ),
-                            )
-                        if away_scenario:
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=away_scenario["timeline"]["Minute"],
-                                    y=away_scenario["timeline"]["Match"],
-                                    mode="lines+markers",
-                                    name=f"{m_data['Away']} - Partida",
-                                    line=dict(color="#ff4b4b"),
-                                ),
-                            )
-
-                        if fig.data:
-                            fig.update_layout(
-                                title=f"Probabilidade acumulada de gol após 75' - {title}",
-                                xaxis_title="Minuto",
-                                yaxis_title="Probabilidade (%)",
-                                template="plotly_dark",
-                                height=380,
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-                        else:
-                            st.info("Sem amostra suficiente para calcular a distribuição deste cenário.")
-
-                    render_poisson_time_block("Cenário 0x0 aos 75'", scenario_00_home, scenario_00_away)
-                    render_poisson_time_block("Cenário 0x1 aos 75'", scenario_01_home, scenario_01_away)
+                    render_poisson_time_block("Cenário 0x0 aos 75'", scenario_00_home, scenario_00_away, m_data["Home"], m_data["Away"])
+                    render_poisson_time_block("Cenário 0x1 aos 75'", scenario_01_home, scenario_01_away, m_data["Home"], m_data["Away"])
 
                 with st.expander("Timing e Placares", expanded=False):
-                    st.markdown('<div class="section-kicker">Leitura de minutagem e placares</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="section-heading">Minuto do 1º gol e placares recorrentes</div>', unsafe_allow_html=True)
+                    render_section_header("Leitura de minutagem e placares", "Minuto do 1º gol e placares recorrentes")
                     if t_stats_h and t_stats_a:
                         tsum1, tsum2, tsum3 = st.columns(3)
                         with tsum1:
@@ -1107,12 +742,6 @@ with main_tab:
 
                         st.markdown("#### 🔢 Placares Mais Frequentes (%)")
 
-                        def display_scores(scores_dict):
-                            df_scores = pd.DataFrame(list(scores_dict.items()), columns=["Placar", "Freq %"]).sort_values("Freq %", ascending=False)
-                            fig = px.bar(df_scores, x="Placar", y="Freq %", text_auto=".1f", color="Freq %", color_continuous_scale="Viridis", template="plotly_dark")
-                            fig.update_layout(height=300, showlegend=False)
-                            st.plotly_chart(fig, use_container_width=True)
-
                         tab_scores1, tab_scores2, tab_scores3 = st.tabs([f"🏠 {m_data['Home']}", f"🚀 {m_data['Away']}", "🤝 Confronto (Ambos)"])
 
                         with tab_scores1:
@@ -1139,68 +768,8 @@ with main_tab:
                         st.warning("Dados de minutagem insuficientes para este confronto.")
 
                 with st.expander("Variância e Matriz Poisson", expanded=False):
-                    st.markdown('<div class="section-kicker">Variância e probabilidade</div>', unsafe_allow_html=True)
-                    st.markdown('<div class="section-heading">Eficiência, variância e matriz</div>', unsafe_allow_html=True)
-                    vsum1, vsum2, vsum3 = st.columns(3)
-                    with vsum1:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.metric(f"{m_data['Home']}", f"{results['home']['mean']:.2f}", help="Média esperada de gols")
-                        st.caption(f"Variância: {results['home']['variance']:.3f}")
-                        st.markdown("</div>", unsafe_allow_html=True)
-                    with vsum2:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.metric(f"{m_data['Away']}", f"{results['away']['mean']:.2f}", help="Média esperada de gols")
-                        st.caption(f"Variância: {results['away']['variance']:.3f}")
-                        st.markdown("</div>", unsafe_allow_html=True)
-                    with vsum3:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                        st.metric("Matriz", "Poisson", help="Probabilidades combinadas de placar")
-                        st.caption("Grade de 0x0 a 4x4")
-                        st.markdown("</div>", unsafe_allow_html=True)
-
-                    v1, v2 = st.columns(2)
-                    with v1:
-                        st.write(f"### 🏠 {m_data['Home']}")
-                        st.write(f"**Variância de Gols:** {results['home']['variance']:.3f}")
-                        st.write(f"**Custo do Gol (Eficiência):** {results['home']['cost']:.3f}")
-                        norm_h = normalize_team_name(m_data["Home"])
-                        h_goals = results["h_games"].apply(
-                            lambda r: r["Goals_H_FT"] if normalize_team_name(r["Home"]) == norm_h else r["Goals_A_FT"],
-                            axis=1,
-                        )
-                        fig_h = go.Figure()
-                        fig_h.add_trace(go.Scatter(y=h_goals, mode="lines+markers", name="Gols", line=dict(color="#00ff88")))
-                        fig_h.update_layout(title="Histórico de Gols (Casa)", template="plotly_dark", height=250)
-                        st.plotly_chart(fig_h, use_container_width=True)
-                    with v2:
-                        st.write(f"### 🚀 {m_data['Away']}")
-                        st.write(f"**Variância de Gols:** {results['away']['variance']:.3f}")
-                        st.write(f"**Custo do Gol (Eficiência):** {results['away']['cost']:.3f}")
-                        norm_a = normalize_team_name(m_data["Away"])
-                        a_goals = results["a_games"].apply(
-                            lambda r: r["Goals_A_FT"] if normalize_team_name(r["Away"]) == norm_a else r["Goals_H_FT"],
-                            axis=1,
-                        )
-                        fig_a = go.Figure()
-                        fig_a.add_trace(go.Scatter(y=a_goals, mode="lines+markers", name="Gols", line=dict(color="#ff4b4b")))
-                        fig_a.update_layout(title="Histórico de Gols (Fora)", template="plotly_dark", height=250)
-                        st.plotly_chart(fig_a, use_container_width=True)
-
-                    st.markdown("#### 🎲 Matriz de Probabilidades (Poisson)")
-                    max_goals = 5
-                    matrix = np.zeros((max_goals, max_goals))
-                    for i in range(max_goals):
-                        for j in range(max_goals):
-                            matrix[i, j] = (poisson.pmf(i, results["home"]["mean"]) * poisson.pmf(j, results["away"]["mean"])) * 100
-                    fig_matrix = px.imshow(
-                        matrix,
-                        labels=dict(x="Gols Visitante", y="Gols Mandante", color="%"),
-                        x=[str(i) for i in range(max_goals)],
-                        y=[str(i) for i in range(max_goals)],
-                        color_continuous_scale="Viridis",
-                        text_auto=".1f",
-                    )
-                    st.plotly_chart(fig_matrix, use_container_width=True)
+                    render_section_header("Variância e probabilidade", "Eficiência, variância e matriz")
+                    render_variance_section(results, m_data["Home"], m_data["Away"], normalize_team_name)
 
 with bets_tab:
     st.subheader("🧾 Planilha de Apostas")
@@ -1279,45 +848,27 @@ with bets_tab:
         roi_liability = (total_result / total_liability) * 100 if total_liability > 0 else 0.0
         green_rate = (greens_count / settled_count) * 100 if settled_count > 0 else 0.0
 
-        m1, m2, m3, m4, m5, m6 = st.columns(6)
-        with m1:
-            st.metric("ROI Stake", f"{roi_stake:+.1f}%")
-        with m2:
-            st.metric("ROI Respons.", f"{roi_liability:+.1f}%")
-        with m3:
-            st.metric("Acumulado", f"R$ {total_result:.2f}")
-        with m4:
-            st.metric("Greens", str(greens_count))
-        with m5:
-            st.metric("Reds", str(reds_count))
-        with m6:
-            st.metric("Odd Média", f"{avg_odd:.2f}")
+        render_stat_grid(
+            [
+                ("ROI Stake", f"{roi_stake:+.1f}%", None),
+                ("ROI Respons.", f"{roi_liability:+.1f}%", None),
+                ("Acumulado", f"R$ {total_result:.2f}", None),
+                ("Greens", str(greens_count), None),
+                ("Reds", str(reds_count), None),
+                ("Odd Média", f"{avg_odd:.2f}", None),
+            ],
+            columns=6,
+        )
 
-        s1, s2, s3, s4 = st.columns(4)
-        with s1:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.write("**Volume**")
-            st.write(f"Entradas totais: {total_bets}")
-            st.write(f"Apostas liquidadas: {settled_count}")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with s2:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.write("**Capital Exposto**")
-            st.write(f"Stake total: R$ {total_stake:.2f}")
-            st.write(f"Responsabilidade total: R$ {total_liability:.2f}")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with s3:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.write("**Eficiência**")
-            st.write(f"Taxa de green: {green_rate:.1f}%")
-            st.write(f"Resultado médio: R$ {avg_result:.2f}")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with s4:
-            st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            st.write("**Leitura Rápida**")
-            st.write(f"Melhor base %: {roi_liability:+.1f}% sobre responsabilidade")
-            st.write("Mercado dominante: Lay 0x1")
-            st.markdown("</div>", unsafe_allow_html=True)
+        render_stat_grid(
+            [
+                ("Volume", f"{total_bets}", f"Apostas liquidadas: {settled_count}"),
+                ("Capital Exposto", f"R$ {total_stake:.2f}", f"Responsabilidade total: R$ {total_liability:.2f}"),
+                ("Eficiência", f"{green_rate:.1f}%", f"Resultado médio: R$ {avg_result:.2f}"),
+                ("Leitura Rápida", f"{roi_liability:+.1f}%", "Mercado dominante: Lay 0x1"),
+            ],
+            columns=4,
+        )
 
 with notes_tab:
     st.subheader("🗒️ Bloco de Notas")
@@ -1413,44 +964,7 @@ with notes_tab:
         else:
             st.markdown("### 📌 Cartões")
             for _, row in filtered_notes.iterrows():
-                priority_colors = {
-                    "Baixa": "#6c757d",
-                    "Média": "#4a9eff",
-                    "Alta": "#ff9f1c",
-                    "Urgente": "#ff4b4b",
-                }
-                card_border = priority_colors.get(str(row["priority"]), "#4a9eff")
-                pinned_label = "Fixada" if bool(row["pinned"]) else "Normal"
-                st.markdown(
-                    f"""
-                    <div style="
-                        background: linear-gradient(145deg, #1e2130, #161924);
-                        border: 1px solid {card_border};
-                        border-left: 8px solid {card_border};
-                        border-radius: 14px;
-                        padding: 16px 18px;
-                        margin-bottom: 12px;
-                        box-shadow: 0 8px 25px rgba(0,0,0,0.25);
-                    ">
-                        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
-                            <div>
-                                <div style="font-size:1.05rem; font-weight:700; color:#ffffff;">{row["title"] or "Sem título"}</div>
-                                <div style="color:#a9b4c3; margin-top:4px;">{row["note"] or "Sem conteúdo"} </div>
-                            </div>
-                            <div style="text-align:right; color:#d8deea; min-width:150px;">
-                                <div><strong>Prioridade:</strong> {row["priority"]}</div>
-                                <div><strong>Status:</strong> {row["status"]}</div>
-                                <div><strong>Tag:</strong> {row["tag"] or "-"}</div>
-                                <div><strong>Topo:</strong> {pinned_label}</div>
-                            </div>
-                        </div>
-                        <div style="margin-top:10px; color:#8c97a8; font-size:0.82rem;">
-                            Criada em {row["created_at"]} | Atualizada em {row["updated_at"]}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                render_note_card(row)
                 image_path = str(row.get("image_path", "")).strip()
                 if image_path and Path(image_path).exists():
                     st.image(image_path, caption="Printscreen anexado", use_container_width=True)
@@ -1458,31 +972,12 @@ with notes_tab:
         st.info("Nenhuma nota criada ainda.")
 
     st.markdown("---")
-    st.subheader("✍️ Nova Nota")
-    c1, c2, c3 = st.columns([2, 1, 1])
-    with c1:
-        new_title = st.text_input("Título", placeholder="Ex.: Jogo com risco alto no 1T")
-    with c2:
-        new_tag = st.text_input("Tag", placeholder="Ex.: risco, live, estudo")
-    with c3:
-        new_priority = st.selectbox("Prioridade", NOTE_PRIORITY_OPTIONS, index=1)
-
-    n1, n2 = st.columns([2, 1])
-    with n1:
-        new_note = st.text_area("Conteúdo", placeholder="Escreva sua leitura, gatilhos, dúvidas e planos...", height=160)
-    with n2:
-        new_status = st.selectbox("Status", NOTE_STATUS_OPTIONS, index=0)
-        new_pinned = st.checkbox("Fixar no topo", value=False)
-        new_image = st.file_uploader(
-            "Anexar printscreen",
-            type=["png", "jpg", "jpeg", "webp"],
-            key="new_note_image",
-        )
+    new_note_form = render_new_note_form(NOTE_PRIORITY_OPTIONS, NOTE_STATUS_OPTIONS)
 
     add_col, clear_col = st.columns(2)
     with add_col:
         if st.button("Salvar Nota", use_container_width=True):
-            if new_title.strip() or new_note.strip():
+            if new_note_form["title"].strip() or new_note_form["note"].strip():
                 now = pd.Timestamp.now().isoformat(timespec="seconds")
                 note_id = new_note_id()
                 new_row = pd.DataFrame(
@@ -1491,13 +986,13 @@ with notes_tab:
                             "id": note_id,
                             "created_at": now,
                             "updated_at": now,
-                            "title": new_title.strip(),
-                            "note": new_note.strip(),
-                            "tag": new_tag.strip(),
-                            "priority": new_priority,
-                            "status": new_status,
-                            "pinned": bool(new_pinned),
-                            "image_path": save_note_attachment(new_image, note_id) if new_image is not None else "",
+                            "title": new_note_form["title"].strip(),
+                            "note": new_note_form["note"].strip(),
+                            "tag": new_note_form["tag"].strip(),
+                            "priority": new_note_form["priority"],
+                            "status": new_note_form["status"],
+                            "pinned": bool(new_note_form["pinned"]),
+                            "image_path": save_note_attachment(new_note_form["image"], note_id) if new_note_form["image"] is not None else "",
                         },
                     ],
                 )
@@ -1513,60 +1008,26 @@ with notes_tab:
 
     if not df_notes.empty:
         st.markdown("---")
-        st.subheader("🛠️ Editar Notas")
         editable_order = df_notes.sort_values(by=["pinned", "updated_at"], ascending=[False, False]).reset_index(drop=True)
         note_options = {f"{idx + 1}. {row['title'] or 'Sem título'} | {row['priority']} | {row['status']}": row["id"] for idx, row in editable_order.iterrows()}
         selected_note_label = st.selectbox("Selecionar nota", list(note_options.keys()))
         selected_note_id = note_options[selected_note_label]
         selected_idx = df_notes.index[df_notes["id"] == selected_note_id][0]
         selected_note = df_notes.loc[selected_idx]
-
-        e1, e2, e3 = st.columns(3)
-        with e1:
-            edit_title = st.text_input("Título da nota", value=str(selected_note["title"]))
-        with e2:
-            edit_tag = st.text_input("Tag da nota", value=str(selected_note["tag"]))
-        with e3:
-            edit_priority = st.selectbox(
-                "Prioridade da nota",
-                NOTE_PRIORITY_OPTIONS,
-                index=NOTE_PRIORITY_OPTIONS.index(str(selected_note["priority"])) if str(selected_note["priority"]) in NOTE_PRIORITY_OPTIONS else 1,
-            )
-
-        s1, s2 = st.columns(2)
-        with s1:
-            edit_status = st.selectbox(
-                "Status da nota",
-                NOTE_STATUS_OPTIONS,
-                index=NOTE_STATUS_OPTIONS.index(str(selected_note["status"])) if str(selected_note["status"]) in NOTE_STATUS_OPTIONS else 0,
-            )
-        with s2:
-            edit_pinned = st.checkbox("Fixada no topo", value=bool(selected_note["pinned"]))
-
-        edit_note = st.text_area("Conteúdo da nota", value=str(selected_note["note"]), height=180)
-
-        current_image_path = str(selected_note.get("image_path", "")).strip()
-        if current_image_path and Path(current_image_path).exists():
-            st.image(current_image_path, caption="Printscreen atual", use_container_width=True)
-
-        edit_image = st.file_uploader(
-            "Trocar printscreen",
-            type=["png", "jpg", "jpeg", "webp"],
-            key=f"edit_note_image_{selected_note_id}",
-        )
+        edit_form = render_edit_note_form(selected_note, NOTE_PRIORITY_OPTIONS, NOTE_STATUS_OPTIONS, selected_note_id)
 
         a1, a2, a3 = st.columns(3)
         with a1:
             if st.button("Salvar Alterações", use_container_width=True):
-                if edit_image is not None:
-                    saved_image_path = save_note_attachment(edit_image, selected_note_id)
+                if edit_form["image"] is not None:
+                    saved_image_path = save_note_attachment(edit_form["image"], selected_note_id)
                     df_notes.loc[selected_idx, "image_path"] = saved_image_path
-                df_notes.loc[selected_idx, "title"] = edit_title.strip()
-                df_notes.loc[selected_idx, "tag"] = edit_tag.strip()
-                df_notes.loc[selected_idx, "priority"] = edit_priority
-                df_notes.loc[selected_idx, "status"] = edit_status
-                df_notes.loc[selected_idx, "pinned"] = bool(edit_pinned)
-                df_notes.loc[selected_idx, "note"] = edit_note.strip()
+                df_notes.loc[selected_idx, "title"] = edit_form["title"].strip()
+                df_notes.loc[selected_idx, "tag"] = edit_form["tag"].strip()
+                df_notes.loc[selected_idx, "priority"] = edit_form["priority"]
+                df_notes.loc[selected_idx, "status"] = edit_form["status"]
+                df_notes.loc[selected_idx, "pinned"] = bool(edit_form["pinned"])
+                df_notes.loc[selected_idx, "note"] = edit_form["note"].strip()
                 df_notes.loc[selected_idx, "updated_at"] = pd.Timestamp.now().isoformat(timespec="seconds")
                 save_notes(df_notes)
                 st.success("Nota atualizada com sucesso.")

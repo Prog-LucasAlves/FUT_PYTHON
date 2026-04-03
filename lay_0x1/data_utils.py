@@ -8,6 +8,24 @@ from app_config import PROJECT_ROOT, UNKNOWN_TEAMS_LOG_FILE, UNKNOWN_TEAMS_RESOL
 from lay0x1_core import normalize_team_name
 from team_map import is_known_team_name, map_team_name
 
+REQUIRED_TODAY_COLUMNS = {"Date", "Home", "Away"}
+
+
+def _read_csv_file(file_path, sep=";"):
+    try:
+        return pd.read_csv(file_path, sep=sep)
+    except Exception as exc:
+        st.sidebar.warning(f"Falha ao ler {file_path.name}: {exc}")
+        return None
+
+
+def _validate_columns(df, required_columns, source_label):
+    missing = [col for col in required_columns if col not in df.columns]
+    if missing:
+        st.sidebar.warning(f"{source_label}: colunas ausentes {', '.join(missing)}")
+        return False
+    return True
+
 
 def log_unknown_team_names(df, source_label):
     if df.empty:
@@ -79,6 +97,8 @@ def load_historical_data():
         return pd.DataFrame()
 
     df = pd.read_csv(source_path, sep=";")
+    if not _validate_columns(df, {"Date", "Home", "Away", "Goals_H_FT", "Goals_A_FT"}, "dados históricos"):
+        return pd.DataFrame()
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.dropna(subset=["Goals_H_FT", "Goals_A_FT"])
     df["Norm_Home"] = df["Home"].apply(normalize_team_name)
@@ -87,6 +107,8 @@ def load_historical_data():
     if footy_path.exists():
         try:
             df_footy = pd.read_csv(footy_path, sep=";")
+            if not _validate_columns(df_footy, {"Date", "Home", "Away"}, "dados FootyStats"):
+                return df
             log_unknown_team_names(df_footy, "historical_footystats")
             df_footy["Date"] = pd.to_datetime(df_footy["Date"])
             df_footy["Home"] = df_footy["Home"].apply(map_team_name)
@@ -150,25 +172,28 @@ def load_today_games():
     files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
     df_list = []
     for file in files:
-        try:
-            df_temp = pd.read_csv(file, sep=";")
-            df_list.append(df_temp)
-        except Exception:
-            pass
+        df_temp = _read_csv_file(file, sep=";")
+        if df_temp is None or df_temp.empty:
+            continue
+        if not _validate_columns(df_temp, REQUIRED_TODAY_COLUMNS, file.name):
+            continue
+        df_list.append(df_temp)
 
     if not df_list:
         return pd.DataFrame()
 
     df = pd.concat(df_list, ignore_index=True)
-    log_unknown_team_names(df, "data_day")
+    if not _validate_columns(df, REQUIRED_TODAY_COLUMNS, "dados do dia concatenados"):
+        return pd.DataFrame()
     df["Date"] = pd.to_datetime(df["Date"])
+    df["Home"] = df["Home"].apply(map_team_name)
+    df["Away"] = df["Away"].apply(map_team_name)
+    log_unknown_team_names(df, "data_day")
     odds_cols = [c for c in df.columns if "Odd_" in c]
     df["non_zero_count"] = (df[odds_cols] > 0).sum(axis=1)
     df = df.sort_values("non_zero_count", ascending=False)
     df = df.drop_duplicates(subset=["Date", "Home", "Away"], keep="first")
     df = df.drop(columns=["non_zero_count"])
-    df["Home"] = df["Home"].apply(map_team_name)
-    df["Away"] = df["Away"].apply(map_team_name)
     df["Norm_Home"] = df["Home"].apply(normalize_team_name)
     df["Norm_Away"] = df["Away"].apply(normalize_team_name)
     df["Match"] = df["Home"].astype(str) + " vs " + df["Away"].astype(str)

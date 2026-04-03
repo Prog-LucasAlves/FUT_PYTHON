@@ -75,6 +75,11 @@ FOOTYSTATS_TEAM_MAP = {
     "Vitória Guimarães": "Vitoria Guimaraes",
     "West Ham United": "West Ham",
     "Wolverhampton Wanderers": "Wolves",
+    "Red Bull Bragantino": "Bragantino",
+    "Paris St-G": "PSG",
+    "AVS Futebol SAD": "AVS",
+    "Guimaraes": "Vitoria Guimaraes",
+    "Sporting Lisbon": "Sporting CP",
 }
 
 
