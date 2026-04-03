@@ -679,7 +679,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
         "poisson_0x1": poisson_0x1,
         "poisson_0x1_label": "Heurística Poisson",
         "heuristic_success": heuristic_success,
-        "heuristic_success_label": "Complemento heurístico",
+        "heuristic_success_label": "Heurística Poisson",
         "h_games": home_h,
         "a_games": away_a,
         "sample_home": sample_home,
