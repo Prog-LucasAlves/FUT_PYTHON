@@ -491,8 +491,10 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
             return games.apply(lambda r: get_team_val(r, col_h, col_a), axis=1)
 
         goals = games.apply(lambda r: get_team_val(r, "Goals_H_FT", "Goals_A_FT"), axis=1)
+        goals_ht = games.apply(lambda r: get_team_val(r, "Goals_H_HT", "Goals_A_HT"), axis=1)
         mins = games.apply(lambda r: get_team_val(r, "Min_Goals_H", "Min_Goals_A"), axis=1)
         mean_goals = goals.mean()
+        mean_goals_ht = goals_ht.mean()
         variance = goals.var()
         first_goal_mins = mins.apply(lambda x: x[0] if len(x) > 0 else None).dropna()
         avg_first_goal = first_goal_mins.mean() if not first_goal_mins.empty else 0
@@ -519,6 +521,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
             finishing_desc = "Dados de finalização indisponíveis no histórico"
         return {
             "mean": mean_goals,
+            "mean_ht": mean_goals_ht,
             "variance": variance,
             "cost": cost_of_goal,
             "zeros": (len(games[goals == 0]) / len(games)) * 100,
@@ -582,9 +585,9 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
     role_profile_away = build_team_role_profile(df_games, away_team, "away", normalize_team_name_fn)
     lay01_index_home, lay01_var_home = calculate_lay_strength_index(stats_h)
     lay01_index_away, lay01_var_away = calculate_lay_strength_index(stats_a)
-    prob_h0 = poisson.pmf(0, stats_h["mean"])
-    prob_a1 = poisson.pmf(1, stats_a["mean"])
-    poisson_0x1 = (prob_h0 * prob_a1) * 100
+    prob_h0_ht = poisson.pmf(0, stats_h["mean_ht"])
+    prob_a1_ht = poisson.pmf(1, stats_a["mean_ht"])
+    poisson_0x1_ht = (prob_h0_ht * prob_a1_ht) * 100
 
     def analyze_ht_scenarios(games_h, games_a):
         h_00_ht = games_h[(games_h["Goals_H_HT"] == 0) & (games_h["Goals_A_HT"] == 0)]
@@ -598,6 +601,19 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
         return prob_red_from_00, prob_red_from_01
 
     red_00, red_01 = analyze_ht_scenarios(home_h, away_a)
+    combined_games = pd.concat([home_h, away_a])
+    total_combined = len(combined_games)
+    if total_combined > 0:
+        ht_scores = combined_games["Goals_H_HT"].astype(int).astype(str) + "x" + combined_games["Goals_A_HT"].astype(int).astype(str)
+        ft_scores = combined_games["Goals_H_FT"].astype(int).astype(str) + "x" + combined_games["Goals_A_FT"].astype(int).astype(str)
+        pct_00_ht = float((ht_scores == "0x0").mean() * 100)
+        pct_01_ht = float((ht_scores == "0x1").mean() * 100)
+        pct_00_ft = float((ft_scores == "0x0").mean() * 100)
+        pct_01_ft = float((ft_scores == "0x1").mean() * 100)
+    else:
+        pct_00_ht = pct_01_ht = pct_00_ft = pct_01_ft = 0.0
+    pct_other_ht = max(0.0, 100.0 - pct_00_ht - pct_01_ht)
+    pct_other_ft = max(0.0, 100.0 - pct_00_ft - pct_01_ft)
     sample_home = len(home_h)
     sample_away = len(away_a)
     min_sample = min(sample_home, sample_away)
@@ -640,13 +656,13 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
     if stats_h["avg_xg"] > 1.5:
         score += 1
         reasons.append(f"xG Mandante alto ({stats_h['avg_xg']:.2f}): Forte produção ofensiva")
-    if poisson_0x1 < 7:
+    if poisson_0x1_ht < 7:
         score += 2
-        reasons.append(f"Baixa probabilidade Poisson ({poisson_0x1:.1f}%)")
-    heuristic_success = 100 - poisson_0x1
-    if heuristic_success > 92:
-        score += 2
-        reasons.append(f"Sinal heurístico forte ({heuristic_success:.1f}%)")
+        reasons.append(f"Baixa probabilidade Poisson no HT ({poisson_0x1_ht:.1f}%)")
+    heuristic_success = poisson_0x1_ht
+    if heuristic_success > 12:
+        score += 1
+        reasons.append(f"Sinal heurístico forte no HT ({heuristic_success:.1f}%)")
     if sample_quality == "Boa":
         score += 1
         reasons.append("Amostra histórica boa: leitura mais confiável")
@@ -676,10 +692,10 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
         "lay_var_away_label": classify_variance(lay01_var_away),
         "lay_var_home_desc": describe_variance(classify_variance(lay01_var_home), "mandante"),
         "lay_var_away_desc": describe_variance(classify_variance(lay01_var_away), "visitante"),
-        "poisson_0x1": poisson_0x1,
-        "poisson_0x1_label": "Heurística Poisson",
+        "poisson_0x1": poisson_0x1_ht,
+        "poisson_0x1_label": "Heurística Poisson HT",
         "heuristic_success": heuristic_success,
-        "heuristic_success_label": "Heurística Poisson",
+        "heuristic_success_label": "Heurística Poisson HT",
         "h_games": home_h,
         "a_games": away_a,
         "sample_home": sample_home,
@@ -688,6 +704,12 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
         "sample_warning": min_sample < 25,
         "red_from_00": red_00,
         "red_from_01": red_01,
+        "pct_00_ht": pct_00_ht,
+        "pct_01_ht": pct_01_ht,
+        "pct_00_ft": pct_00_ft,
+        "pct_01_ft": pct_01_ft,
+        "pct_other_ht": pct_other_ht,
+        "pct_other_ft": pct_other_ft,
         "recommendation": recommendation,
         "score": score,
         "max_score": max_score,

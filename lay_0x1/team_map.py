@@ -80,6 +80,20 @@ FOOTYSTATS_TEAM_MAP = {
     "AVS Futebol SAD": "AVS",
     "Guimaraes": "Vitoria Guimaraes",
     "Sporting Lisbon": "Sporting CP",
+    "Mgladbach": "B. Monchengladbach",
+    "FC Heidenheim": "Heidenheim",
+    "Leverkusen": "Bayer Leverkusen",
+    "CD Nacional Funchal": "Nacional",
+    "Club Football Estrela": "Estrela",
+    "Cruzeiro MG": "Cruzeiro",
+    "Vasco Da Gama": "Vasco",
+    "Botafogo FR": "Botafogo RJ",
+    "US Cremonese": "Cremonese",
+    "EC Vitoria Salvador": "Vitoria",
+    "SE Palmeiras": "Palmeiras",
+    "Athletic Bilbao": "Ath Bilbao",
+    "Oviedo": "R. Oviedo",
+    "Estoril Praia": "Estoril",
 }
 
 
