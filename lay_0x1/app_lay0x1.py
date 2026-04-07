@@ -369,7 +369,8 @@ with main_tab:
                     st.markdown('<div class="panel-title">Valor (EV)</div>', unsafe_allow_html=True)
                     odd_lay = m_data.get("Odd_CS_0x1_Lay", 0)
                     if odd_lay > 0:
-                        ev = (results["heuristic_success"] / 100) * 1 - (1 - results["heuristic_success"] / 100) * (odd_lay - 1)
+                        lay_success_prob = max(0.0, 1 - (results["heuristic_success"] / 100))
+                        ev = lay_success_prob * 1 - (1 - lay_success_prob) * (odd_lay - 1)
                         st.write(
                             f"EV: <span class='{'highlight-green' if ev > 0 else 'highlight-red'}'>{ev:+.2f}</span>",
                             unsafe_allow_html=True,
@@ -549,42 +550,55 @@ with main_tab:
                 # DASHBOARD PRINCIPAL (POISSON E VOLATILIDADE)
                 st.markdown("---")
                 st.markdown('<div class="section-kicker">Modelos e projeções</div><div class="section-heading">Análise Quantitativa e In-Play</div>', unsafe_allow_html=True)
-                c1, c2, c3, c4 = st.columns(4)
+                c1, c2, c3 = st.columns(3)
                 with c1:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.metric("0x0 FT", f"{100 - results['poisson_0x1']:.2f}%")
-                    st.write(f"{results['poisson_0x1_label']}")
-                    st.caption("Leitura de placar final sem 0x1.")
+                    st.metric("0x0 HT", f"{results['red_from_00']:.2f}%")
+                    st.write("Heurística Poisson HT")
+                    st.caption("Leitura heurística de terminar o 1º tempo sem gols.")
                     st.markdown("</div>", unsafe_allow_html=True)
                 with c2:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.write("**Heurística Poisson - 0x0 HT**")
-                    st.write(f"0x0 até o HT: {results['red_from_00']:.1f}%")
-                    st.caption("Probabilidade heurística de chegar ao intervalo sem gol.")
+                    st.metric("0x0 FT", f"{results['pct_00_ft']:.2f}%")
+                    st.write("Heurística Poisson FT")
+                    st.caption("Leitura histórica de terminar sem gols no jogo.")
                     st.markdown("</div>", unsafe_allow_html=True)
                 with c3:
                     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.write("**Heurística Poisson - 0x1 HT**")
-                    st.write(f"0x1 antes do HT: {results['heuristic_success']:.1f}%")
-                    st.caption("Complemento heurístico da chance de sair 0x1 antes do intervalo.")
-                    st.markdown("</div>", unsafe_allow_html=True)
-                with c4:
-                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.write("**Heurística Poisson - Leitura final**")
-                    st.write(f"Score do Sinal: {results['score']}/{results['max_score']}")
-                    st.write(f"Recomendação: {results['recommendation']}")
-                    st.caption("Resumo de Heurística Poisson para 0x0 FT, 0x0 HT e 0x1 HT.")
+                    st.metric("0x1 HT", f"{results['pct_01_ht']:.2f}%")
+                    st.write("Heurística Poisson HT")
+                    st.caption("Leitura histórica de terminar o 1º tempo em 0x1.")
                     st.markdown("</div>", unsafe_allow_html=True)
 
-                signal_color = "#00ff88" if results["poisson_0x1"] >= 18 else "#ffd56a" if results["poisson_0x1"] >= 10 else "#ff4b4b"
+                c4, c5, c6 = st.columns(3)
+                with c4:
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    st.metric("0x1 FT", f"{results['pct_01_ft']:.2f}%")
+                    st.write("Heurística Poisson FT")
+                    st.caption("Leitura histórica de terminar o jogo em 0x1.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                with c5:
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    st.metric("Qualquer outro HT", f"{results['pct_other_ht']:.2f}%")
+                    st.write("Heurística Poisson HT")
+                    st.caption("Qualquer placar no intervalo diferente de 0x0 e 0x1.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                with c6:
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    st.metric("Qualquer outro FT", f"{results['pct_other_ft']:.2f}%")
+                    st.write("Heurística Poisson FT")
+                    st.caption("Qualquer placar final diferente de 0x0 e 0x1.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                signal_color = "#00ff88" if results["poisson_0x1"] <= 7 else "#ffd56a" if results["poisson_0x1"] <= 12 else "#ff4b4b"
                 st.markdown(
                     f"""
                     <div class="metric-card" style="border-left: 5px solid {signal_color};">
                         <div class="section-kicker">Leitura prática</div>
                         <div class="panel-title">Como interpretar o cenário</div>
-                        <div style="margin:0.15rem 0 0.35rem 0;">Heurística Poisson para 0x0 HT: jogo tende a chegar zerado ao intervalo.</div>
-                        <div style="margin:0.15rem 0 0.35rem 0;">Heurística Poisson para 0x1 HT: jogo pode encaixar cedo no padrão esperado.</div>
-                        <span class="badge {"ok" if results["poisson_0x1"] >= 18 else "warn" if results["poisson_0x1"] >= 10 else "bad"}">0x0 FT: {100 - results["poisson_0x1"]:.2f}%</span>
+                        <div style="margin:0.15rem 0 0.35rem 0;">0x0 HT: {results["pct_00_ht"]:.2f}% | 0x1 HT: {results["pct_01_ht"]:.2f}% | outros HT: {results["pct_other_ht"]:.2f}%</div>
+                        <div style="margin:0.15rem 0 0.35rem 0;">0x0 FT: {results["pct_00_ft"]:.2f}% | 0x1 FT: {results["pct_01_ft"]:.2f}% | outros FT: {results["pct_other_ft"]:.2f}%</div>
+                        <span class="badge {"ok" if results["poisson_0x1"] <= 7 else "warn" if results["poisson_0x1"] <= 12 else "bad"}">Sinal 0x1 HT: {results["poisson_0x1"]:.2f}%</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
