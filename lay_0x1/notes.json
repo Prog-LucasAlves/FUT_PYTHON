@@ -2,9 +2,9 @@
   {
     "id":"aecb023b-f676-43d9-8ab1-c4fd06d0d953",
     "created_at":1774992421000,
-    "updated_at":1774992895000,
+    "updated_at":1775557275000,
     "title":"Curso Get Up Trading",
-    "note":"Gol do favorito: Probabilidade de acontecer um gol do favorito e muito grande.\n\nEficiencia:\nFavorito casa\nZebra fora\n\nTotal de jogos\nVitórias\nPontos por jogo(Temporada)\nPontos por jogo(Últimos 10 jogos)\nPontos por jogo(Últimos 5 jogos)\nGols marcados\nGols sofridos\nMédia de gols marcados\nMédia de gols sofridos\n\nAnalise do 1º Gol\n% jogos que marcou 1º Gol\n% jogos que marcou 1º Gol e venceu\n% jogos que marcou 1º Gol e empatou\n% Jogos que marcou 1º Gol e Perdeu\n% Jogos que sofreu 1° Gol\n% jogos que sofreu 1º Gol e venceu\n% jogos que sofreu 1º Gol e empatou\n% Jogos que sofreu 1º Gol e Perdeu\n% jogos que marcou o primeiro gol no 1º tempo\n% jogos que marcou o primeiro gol no 1º tempo e venceu",
+    "note":"Gol do favorito: Probabilidade de acontecer um gol do favorito e muito grande.\n\nOdd Home FT:  >=1.50 & <= 2.00\nBTTS <= 1.90\nOver 2.5 <= 1.90\n\n%Gols marcados\n%Gols sofridos\n\nEficiencia:\nFavorito casa\nZebra fora\n\nTotal de jogos\nVitórias\nPontos por jogo(Temporada)\nPontos por jogo(Últimos 10 jogos)\nPontos por jogo(Últimos 5 jogos)\nGols marcados\nGols sofridos\nMédia de gols marcados\nMédia de gols sofridos\n\nAnalise do 1º Gol\n% jogos que marcou 1º Gol\n% jogos que marcou 1º Gol e venceu\n% jogos que marcou 1º Gol e empatou\n% Jogos que marcou 1º Gol e Perdeu\n% Jogos que sofreu 1° Gol\n% jogos que sofreu 1º Gol e venceu\n% jogos que sofreu 1º Gol e empatou\n% Jogos que sofreu 1º Gol e Perdeu\n% jogos que marcou o primeiro gol no 1º tempo\n% jogos que marcou o primeiro gol no 1º tempo e venceu\n\nMomento da Entrada:\nFavorito com iniciativa de jogo\nPrimeiros 5 minutos de posse ofensiva\nFinalização de perto da àrea, cantos ou no gol\n\nMomento da Saída\nVer ponto determinado na pré análise\nZebra tomou vonta e chega com facilidade\nFavorito está jogando pela Odd inicial\nCartão vermelho\nQual o Red neste momento",
     "tag":"Estudo",
     "priority":"Alta",
     "status":"Aberta",
