@@ -92,7 +92,18 @@ def load_historical_data():
     hist_path = PROJECT_ROOT / "data_total" / "dados_betfair.csv"
     footy_path = PROJECT_ROOT / "data_total" / "dados_footystats.csv"
 
-    source_path = merged_path if merged_path.exists() else hist_path
+    rebuild = False
+    if not merged_path.exists():
+        rebuild = True
+    else:
+        merged_mtime = merged_path.stat().st_mtime
+        if hist_path.exists() and hist_path.stat().st_mtime > merged_mtime:
+            rebuild = True
+        if footy_path.exists() and footy_path.stat().st_mtime > merged_mtime:
+            rebuild = True
+
+    source_path = hist_path if rebuild else merged_path
+
     if not source_path.exists():
         return pd.DataFrame()
 
@@ -140,8 +151,13 @@ def load_historical_data():
             footy_subset = df_footy[cols_to_merge_filtered + ["Norm_Home", "Norm_Away"]].copy()
             footy_subset = footy_subset.drop_duplicates(subset=["Date", "Norm_Home", "Norm_Away"], keep="last")
             missing_footy_cols = [c for c in cols_to_merge_filtered if c not in df.columns]
-            if source_path == hist_path or missing_footy_cols:
+
+            if rebuild or missing_footy_cols:
                 df = pd.merge(df, footy_subset, on=["Date", "Norm_Home", "Norm_Away"], how="left")
+                try:
+                    df.to_csv(merged_path, sep=";", index=False)
+                except Exception as e:
+                    st.sidebar.warning(f"Aviso: Não foi possível atualizar o cache dados_historico.csv: {e}")
         except Exception as e:
             st.sidebar.warning(f"Erro ao mesclar FootyStats: {e}")
 
@@ -155,8 +171,11 @@ def load_historical_data():
         except Exception:
             return []
 
-    df["Min_Goals_H"] = df["Min_Goals_H"].apply(parse_minutes)
-    df["Min_Goals_A"] = df["Min_Goals_A"].apply(parse_minutes)
+    df = df.rename(columns={"Goals_Min_H": "Min_Goals_H", "Goals_Min_A": "Min_Goals_A"})
+    if "Min_Goals_H" in df.columns:
+        df["Min_Goals_H"] = df["Min_Goals_H"].apply(parse_minutes)
+    if "Min_Goals_A" in df.columns:
+        df["Min_Goals_A"] = df["Min_Goals_A"].apply(parse_minutes)
     return df
 
 
