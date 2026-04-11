@@ -647,9 +647,10 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
     if 0 < odd_over25 < 1.90:
         score += 1
         reasons.append(f"Odd Over 2.5 baixa ({odd_over25:.2f}): Expectativa de gols")
-    if stats_h["variance"] > 1.0:
+    #  Tem que ser para o visitante, pois o mandante é o que se espera que tenha mais gols. Se o mandante tem alta variância, é um sinal de que pode ser inconsistente e acabar com placares magros, o que é bom para o Lay 0x1. Se for o visitante, a alta variância pode indicar que ele tem jogos com muitos gols, o que não é bom para o Lay 0x1.
+    if stats_a["variance"] > 1.0:
         score += 1
-        reasons.append(f"Variância Mandante Alta ({stats_h['variance']:.2f}): Time inconsistente (Bom para Lay)")
+        reasons.append(f"Variância Visitante Alta ({stats_a['variance']:.2f}): Time inconsistente (Bom para Lay)")
     if stats_h["cost"] > 1.2:
         score += 1
         reasons.append(f"Custo do Gol Mandante Alto ({stats_h['cost']:.2f}): Dificuldade em manter placares magros")
