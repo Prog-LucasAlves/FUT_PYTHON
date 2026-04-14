@@ -14,6 +14,3 @@ UNKNOWN_TEAMS_LOG_FILE = CURRENT_DIR / "unknown_team_names.log"
 UNKNOWN_TEAMS_RESOLVED_FILE = CURRENT_DIR / "unknown_team_names_resolved.json"
 
 DEFAULT_DATE = pd.Timestamp.today().normalize().date()
-BET_STATUS_OPTIONS = ["", "Green", "75min"]
-NOTE_PRIORITY_OPTIONS = ["Baixa", "Média", "Alta", "Urgente"]
-NOTE_STATUS_OPTIONS = ["Aberta", "Em andamento", "Concluída", "Arquivada"]

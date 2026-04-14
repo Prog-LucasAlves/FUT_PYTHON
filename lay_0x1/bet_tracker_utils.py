@@ -56,6 +56,8 @@ def calculate_lay_liability(odd_entrada, valor_aposta):
 def calculate_lay_result(odd_entrada, valor_aposta, saida, odd_saida_75min):
     if saida == "Green":
         return valor_aposta
+    if saida == "Red":
+        return -(odd_entrada - 1) * valor_aposta
     if saida == "75min" and odd_saida_75min and odd_saida_75min > 0:
         hedge_back_stake = (odd_entrada * valor_aposta) / odd_saida_75min
         return valor_aposta - hedge_back_stake
