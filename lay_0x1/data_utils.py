@@ -153,6 +153,9 @@ def load_historical_data():
             missing_footy_cols = [c for c in cols_to_merge_filtered if c not in df.columns]
 
             if rebuild or missing_footy_cols:
+                overlap_cols = [c for c in footy_subset.columns if c in df.columns and c not in ["Date", "Norm_Home", "Norm_Away"]]
+                if overlap_cols:
+                    df = df.drop(columns=overlap_cols, errors="ignore")
                 df = pd.merge(df, footy_subset, on=["Date", "Norm_Home", "Norm_Away"], how="left")
                 try:
                     df.to_csv(merged_path, sep=";", index=False)

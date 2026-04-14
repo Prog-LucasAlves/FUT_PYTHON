@@ -219,14 +219,17 @@ def get_goal_interval_stats(df_games, home_team, away_team, normalize_team_name_
     a_games = df_games[(df_games["Norm_Home"] == norm_a) | (df_games["Norm_Away"] == norm_a)].copy()
     intervals = [(0, 15), (15, 30), (30, 45), (45, 60), (60, 75), (75, 90)]
 
-    def calc_interval_pct(games, mins_col):
+    def calc_interval_pct(games, team_norm):
         result = {}
         total = len(games)
         if total == 0:
             return {f"{a}-{b}'": 0.0 for a, b in intervals}
         for start, end in intervals:
             label = f"{start}-{end}'"
-            count = games[mins_col].apply(lambda mins: any((m := normalize_goal_minute_fn(x)) is not None and start < m <= end for x in mins)).sum()
+            count = games.apply(
+                lambda row: any((m := normalize_goal_minute_fn(x)) is not None and start < m <= end for x in (row["Min_Goals_H"] if row["Norm_Home"] == team_norm else row["Min_Goals_A"])),
+                axis=1,
+            ).sum()
             result[label] = (count / total) * 100
         return result
 
@@ -241,7 +244,7 @@ def get_goal_interval_stats(df_games, home_team, away_team, normalize_team_name_
             result[label] = (count / total) * 100
         return result
 
-    return {"home_attack": calc_interval_pct(h_games, "Min_Goals_H"), "away_attack": calc_interval_pct(a_games, "Min_Goals_A"), "home_combined": calc_combined(h_games), "away_combined": calc_combined(a_games), "home_sample": len(h_games), "away_sample": len(a_games)}
+    return {"home_attack": calc_interval_pct(h_games, norm_h), "away_attack": calc_interval_pct(a_games, norm_a), "home_combined": calc_combined(h_games), "away_combined": calc_combined(a_games), "home_sample": len(h_games), "away_sample": len(a_games)}
 
 
 def build_poisson_timing_scenario(df_games, team_name, role, scenario_score, cutoff_minute=75, end_minute=90, normalize_team_name_fn=normalize_team_name, count_goals_until_fn=count_goals_until, count_goals_after_fn=count_goals_after):
@@ -496,7 +499,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
         mean_goals = goals.mean()
         mean_goals_ht = goals_ht.mean()
         variance = goals.var()
-        first_goal_mins = mins.apply(lambda x: x[0] if len(x) > 0 else None).dropna()
+        first_goal_mins = mins.apply(lambda x: normalize_goal_minute(x[0]) if len(x) > 0 else None).dropna()
         avg_first_goal = first_goal_mins.mean() if not first_goal_mins.empty else 0
         cost_of_goal = (variance / (mean_goals + 0.001)) if mean_goals > 0 else 0
         avg_xg = games.apply(lambda r: get_team_val(r, "xG_H", "xG_A"), axis=1).mean()
@@ -589,27 +592,56 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
     prob_a1_ht = poisson.pmf(1, stats_a["mean_ht"])
     poisson_0x1_ht = (prob_h0_ht * prob_a1_ht) * 100
 
-    def analyze_ht_scenarios(games_h, games_a):
-        h_00_ht = games_h[(games_h["Goals_H_HT"] == 0) & (games_h["Goals_A_HT"] == 0)]
-        a_00_ht = games_a[(games_a["Goals_H_HT"] == 0) & (games_a["Goals_A_HT"] == 0)]
-        total_00_ht = len(h_00_ht) + len(a_00_ht)
-        prob_red_from_00 = ((len(h_00_ht[(h_00_ht["Goals_H_FT"] == 0) & (h_00_ht["Goals_A_FT"] == 1)]) + len(a_00_ht[(a_00_ht["Goals_H_FT"] == 0) & (a_00_ht["Goals_A_FT"] == 1)])) / total_00_ht * 100) if total_00_ht > 0 else 0
-        h_01_ht = games_h[(games_h["Goals_H_HT"] == 0) & (games_h["Goals_A_HT"] == 1)]
-        a_01_ht = games_a[(games_a["Goals_H_HT"] == 0) & (games_a["Goals_A_HT"] == 1)]
-        total_01_ht = len(h_01_ht) + len(a_01_ht)
-        prob_red_from_01 = ((len(h_01_ht[(h_01_ht["Goals_H_FT"] == 0) & (h_01_ht["Goals_A_FT"] == 1)]) + len(a_01_ht[(a_01_ht["Goals_H_FT"] == 0) & (a_01_ht["Goals_A_FT"] == 1)])) / total_01_ht * 100) if total_01_ht > 0 else 0
+    def _normalize_goals(games, team_norm, suffix):
+        """Return (team_goals, opp_goals) series for the given suffix (HT or FT), normalized to team perspective."""
+        team_g = games.apply(lambda r: int(r[f"Goals_H_{suffix}"]) if r["Norm_Home"] == team_norm else int(r[f"Goals_A_{suffix}"]), axis=1)
+        opp_g = games.apply(lambda r: int(r[f"Goals_A_{suffix}"]) if r["Norm_Home"] == team_norm else int(r[f"Goals_H_{suffix}"]), axis=1)
+        return team_g, opp_g
+
+    def analyze_ht_scenarios(games_h, games_a, norm_h_val, norm_a_val):
+        # Normalize perspective: 0x1 means team_scored=0, opponent_scored=1
+        h_team_ht, h_opp_ht = _normalize_goals(games_h, norm_h_val, "HT")
+        h_team_ft, h_opp_ft = _normalize_goals(games_h, norm_h_val, "FT")
+        a_team_ht, a_opp_ht = _normalize_goals(games_a, norm_a_val, "HT")
+        a_team_ft, a_opp_ft = _normalize_goals(games_a, norm_a_val, "FT")
+
+        # 0x0 HT scenarios (from team perspective)
+        h_00_mask = (h_team_ht == 0) & (h_opp_ht == 0)
+        a_00_mask = (a_team_ht == 0) & (a_opp_ht == 0)
+        total_00_ht = int(h_00_mask.sum()) + int(a_00_mask.sum())
+        # Red = FT ended 0x1 (team 0, opponent 1)
+        h_red_00 = int(((h_team_ft == 0) & (h_opp_ft == 1) & h_00_mask).sum())
+        a_red_00 = int(((a_team_ft == 0) & (a_opp_ft == 1) & a_00_mask).sum())
+        prob_red_from_00 = ((h_red_00 + a_red_00) / total_00_ht * 100) if total_00_ht > 0 else 0
+
+        # 0x1 HT scenarios
+        h_01_mask = (h_team_ht == 0) & (h_opp_ht == 1)
+        a_01_mask = (a_team_ht == 0) & (a_opp_ht == 1)
+        total_01_ht = int(h_01_mask.sum()) + int(a_01_mask.sum())
+        h_red_01 = int(((h_team_ft == 0) & (h_opp_ft == 1) & h_01_mask).sum())
+        a_red_01 = int(((a_team_ft == 0) & (a_opp_ft == 1) & a_01_mask).sum())
+        prob_red_from_01 = ((h_red_01 + a_red_01) / total_01_ht * 100) if total_01_ht > 0 else 0
         return prob_red_from_00, prob_red_from_01
 
-    red_00, red_01 = analyze_ht_scenarios(home_h, away_a)
-    combined_games = pd.concat([home_h, away_a])
-    total_combined = len(combined_games)
+    red_00, red_01 = analyze_ht_scenarios(home_h, away_a, norm_h, norm_a)
+
+    # Normalize combined perspective for HT/FT percentages
+    def _build_normalized_scores(games, team_norm, suffix):
+        team_g, opp_g = _normalize_goals(games, team_norm, suffix)
+        return team_g.astype(str) + "x" + opp_g.astype(str)
+
+    h_ht_scores = _build_normalized_scores(home_h, norm_h, "HT")
+    a_ht_scores = _build_normalized_scores(away_a, norm_a, "HT")
+    h_ft_scores = _build_normalized_scores(home_h, norm_h, "FT")
+    a_ft_scores = _build_normalized_scores(away_a, norm_a, "FT")
+    all_ht_scores = pd.concat([h_ht_scores, a_ht_scores], ignore_index=True)
+    all_ft_scores = pd.concat([h_ft_scores, a_ft_scores], ignore_index=True)
+    total_combined = len(all_ht_scores)
     if total_combined > 0:
-        ht_scores = combined_games["Goals_H_HT"].astype(int).astype(str) + "x" + combined_games["Goals_A_HT"].astype(int).astype(str)
-        ft_scores = combined_games["Goals_H_FT"].astype(int).astype(str) + "x" + combined_games["Goals_A_FT"].astype(int).astype(str)
-        pct_00_ht = float((ht_scores == "0x0").mean() * 100)
-        pct_01_ht = float((ht_scores == "0x1").mean() * 100)
-        pct_00_ft = float((ft_scores == "0x0").mean() * 100)
-        pct_01_ft = float((ft_scores == "0x1").mean() * 100)
+        pct_00_ht = float((all_ht_scores == "0x0").mean() * 100)
+        pct_01_ht = float((all_ht_scores == "0x1").mean() * 100)
+        pct_00_ft = float((all_ft_scores == "0x0").mean() * 100)
+        pct_01_ft = float((all_ft_scores == "0x1").mean() * 100)
     else:
         pct_00_ht = pct_01_ht = pct_00_ft = pct_01_ft = 0.0
     pct_other_ht = max(0.0, 100.0 - pct_00_ht - pct_01_ht)
@@ -647,7 +679,10 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
     if 0 < odd_over25 < 1.90:
         score += 1
         reasons.append(f"Odd Over 2.5 baixa ({odd_over25:.2f}): Expectativa de gols")
-    #  Tem que ser para o visitante, pois o mandante é o que se espera que tenha mais gols. Se o mandante tem alta variância, é um sinal de que pode ser inconsistente e acabar com placares magros, o que é bom para o Lay 0x1. Se for o visitante, a alta variância pode indicar que ele tem jogos com muitos gols, o que não é bom para o Lay 0x1.
+    # Tem que ser para o visitante, pois o mandante é o que se espera que tenha mais gols.
+    # Se o mandante tem alta variância, é um sinal de que pode ser inconsistente e acabar
+    # com placares magros, o que é bom para o Lay 0x1. Se for o visitante, a alta variância
+    # pode indicar que ele tem jogos com muitos gols, o que não é bom para o Lay 0x1.
     if stats_a["variance"] > 1.0:
         score += 1
         reasons.append(f"Variância Visitante Alta ({stats_a['variance']:.2f}): Time inconsistente (Bom para Lay)")

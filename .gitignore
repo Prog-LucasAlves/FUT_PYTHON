@@ -27,6 +27,7 @@ share/python-wheels/
 MANIFEST
 .secrets.baseline
 uv.lock
+.agent
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
