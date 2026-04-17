@@ -99,6 +99,11 @@ load_today_games = load_today_games_raw
 build_risk_plan = lay0x1_core.build_risk_plan
 
 
+@st.cache_data
+def get_team_averages(df):
+    return df.groupby("Home")["Goals_H_FT"].mean().to_dict()
+
+
 # Funções Utilitárias de Formatação
 format_minutes = lay0x1_core.format_minutes
 get_last_10_team_summary = lay0x1_core.get_last_10_team_summary
@@ -219,6 +224,41 @@ with main_tab:
                 # ════════════════════════════════════
                 # 1. HERO VERDICT — FOCAL POINT
                 # ════════════════════════════════════
+
+                # --- PORTFOLIO LOGIC ---
+                team_avg_goals = get_team_averages(df_hist)
+                home_avg = team_avg_goals.get(m_data["Home"], 0)
+
+                def get_bin(val, bins, labels):
+                    for i in range(len(bins) - 1):
+                        if bins[i] < val <= bins[i + 1]:
+                            return labels[i]
+                    return labels[-1]
+
+                bin_h = get_bin(m_data["Odd_H_Back"], [1.0, 1.3, 1.5, 1.7, 2.0, 2.5, 3.0, 100], ["<1.3", "1.3-1.5", "1.5-1.7", "1.7-2.0", "2.1-2.5", "2.6-3.0", "3.0+"])
+                bin_over = get_bin(m_data["Odd_Over25_FT_Back"], [0, 1.6, 1.8, 2.0, 100], ["<1.6", "1.6-1.8", "1.8-2.0", "2.0+"])
+                bin_btts = get_bin(m_data["Odd_BTTS_Yes_Back"], [0, 1.6, 1.8, 2.0, 100], ["<1.6", "1.6-1.8", "1.8-2.0", "2.0+"])
+                bin_lay = get_bin(m_data["Odd_CS_0x1_Lay"], [0, 10, 15, 20, 30, 100], ["<10", "10-15", "15-20", "20-30", "30+"])
+                bin_avg_h = get_bin(home_avg, [0, 1.2, 1.5, 1.8, 5.0], ["<1.2", "1.2-1.5", "1.5-1.8", "1.8+"])
+
+                winning_brackets = [
+                    ("2.1-2.5", "2.0+", "1.8-2.0", "10-15", "1.2-1.5"),
+                    ("1.7-2.0", "2.0+", "2.0+", "15-20", "1.2-1.5"),
+                    ("2.1-2.5", "1.6-1.8", "1.6-1.8", "15-20", "1.8+"),
+                    ("2.1-2.5", "1.8-2.0", "1.6-1.8", "10-15", "1.2-1.5"),
+                    ("<1.3", "<1.6", "1.8-2.0", "30+", "1.8+"),
+                    ("1.5-1.7", "2.0+", "2.0+", "15-20", "1.5-1.8"),
+                    ("1.3-1.5", "1.8-2.0", "2.0+", "20-30", "1.5-1.8"),
+                    ("3.0+", "1.8-2.0", "1.6-1.8", "10-15", "1.8+"),
+                    ("1.3-1.5", "<1.6", "1.8-2.0", "30+", "1.8+"),
+                    ("3.0+", "2.0+", "2.0+", "<10", "1.5-1.8"),
+                ]
+
+                is_portfolio_match = (bin_h, bin_over, bin_btts, bin_lay, bin_avg_h) in winning_brackets
+                portfolio_tag = ""
+                if is_portfolio_match:
+                    portfolio_tag = '<span class="tag tag-g" style="background:#00ff88; color:#000; font-weight:800;">🔥 GOLDEN PORTFOLIO BRANCH</span>'
+
                 st.markdown(
                     f"""
                     <div style="background:#12151c; border:1px solid #1e2433; border-left:4px solid {v_color}; border-radius:6px; padding:14px 18px; margin-bottom:8px;">
@@ -227,6 +267,7 @@ with main_tab:
                                 <div class="mc-label">{m_data.get("League", "")} · Lay 0×1</div>
                                 <div style="font-size:1.2rem; font-weight:700; color:#e8edf4; margin:4px 0;">{m_data["Home"]} × {m_data["Away"]}</div>
                                 <span class="tag {v_tag}">{results["recommendation"]}</span>
+                                {portfolio_tag}
                                 <span class="tag tag-b">{results["score"]}/{results["max_score"]} pts</span>
                                 <span class="tag tag-b">{results["sample_quality"]}</span>
                                 <span class="tag tag-b">{str(m_data.get("Date", "")).split(" ")[0]}</span>
@@ -375,6 +416,7 @@ with main_tab:
                     x1, x2 = st.columns(2)
                     with x1:
                         st.metric("xG Home", f"{results['home']['avg_xg']:.2f}")
+                        st.metric("Home Avg Scored", f"{home_avg:.2f}")
                     with x2:
                         st.metric("xG Away", f"{results['away']['avg_xg']:.2f}")
 
