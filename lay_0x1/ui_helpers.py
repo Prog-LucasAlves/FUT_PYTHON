@@ -73,32 +73,24 @@ def render_note_card(row):
     pinned_label = "Fixada" if bool(row["pinned"]) else "Normal"
     st.markdown(
         f"""
-        <div style="
-            background: linear-gradient(145deg, #1e2130, #161924);
-            border: 1px solid {card_border};
-            border-left: 8px solid {card_border};
-            border-radius: 14px;
-            padding: 16px 18px;
-            margin-bottom: 12px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.25);
-        ">
-            <div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
-                <div>
-                    <div style="font-size:1.05rem; font-weight:700; color:#ffffff;">{row["title"] or "Sem título"}</div>
-                    <div style="color:#a9b4c3; margin-top:4px;">{row["note"] or "Sem conteúdo"} </div>
-                </div>
-                <div style="text-align:right; color:#d8deea; min-width:150px;">
-                    <div><strong>Prioridade:</strong> {row["priority"]}</div>
-                    <div><strong>Status:</strong> {row["status"]}</div>
-                    <div><strong>Tag:</strong> {row["tag"] or "-"}</div>
-                    <div><strong>Topo:</strong> {pinned_label}</div>
-                </div>
-            </div>
-            <div style="margin-top:10px; color:#8c97a8; font-size:0.82rem;">
-                Criada em {row["created_at"]} | Atualizada em {row["updated_at"]}
-            </div>
-        </div>
-        """,
+<div style="background: linear-gradient(145deg, #1e2130, #161924); border: 1px solid {card_border}; border-left: 8px solid {card_border}; border-radius: 14px; padding: 16px 18px; margin-bottom: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.25);">
+<div style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
+<div>
+<div style="font-size:1.05rem; font-weight:700; color:#ffffff;">{row["title"] or "Sem título"}</div>
+<div style="color:#a9b4c3; margin-top:4px;">{row["note"] or "Sem conteúdo"} </div>
+</div>
+<div style="text-align:right; color:#d8deea; min-width:150px;">
+<div><strong>Prioridade:</strong> {row["priority"]}</div>
+<div><strong>Status:</strong> {row["status"]}</div>
+<div><strong>Tag:</strong> {row["tag"] or "-"}</div>
+<div><strong>Topo:</strong> {pinned_label}</div>
+</div>
+</div>
+<div style="margin-top:10px; color:#8c97a8; font-size:0.82rem;">
+Criada em {row["created_at"]} | Atualizada em {row["updated_at"]}
+</div>
+</div>
+""",
         unsafe_allow_html=True,
     )
 
@@ -309,13 +301,13 @@ def render_audit_section(df_hist, results, home_name, away_name, normalize_team_
     st.markdown('<div class="section-kicker">Resumo da auditoria</div>', unsafe_allow_html=True)
     st.markdown(
         f"""
-        <div class="compact-panel">
-            <span class="badge ok">OK: {ok_count}</span>
-            <span class="badge warn">Divergente: {divergent_count}</span>
-            <span class="badge info">Total: {total_count}</span>
-            <span class="badge {"ok" if coverage == 100 else "warn"}">Cobertura: {coverage:.0f}%</span>
-        </div>
-        """,
+<div class="compact-panel">
+<span class="badge ok">OK: {ok_count}</span>
+<span class="badge warn">Divergente: {divergent_count}</span>
+<span class="badge info">Total: {total_count}</span>
+<span class="badge {"ok" if coverage == 100 else "warn"}">Cobertura: {coverage:.0f}%</span>
+</div>
+""",
         unsafe_allow_html=True,
     )
     if total_count > 0:
@@ -360,14 +352,14 @@ def render_exec_summary(home_profile, away_profile, home_last10, away_last10):
         score_label, score_color = "Aperto", "info"
     st.markdown(
         f"""
-        <div class="metric-card" style="border-left: 5px solid {"#00ff88" if score_color == "ok" else "#ffd56a" if score_color == "warn" else "#4a9eff"};">
-            <div class="section-kicker">Score Executivo</div>
-            <div class="hero-score">{home_score:.1f} x {away_score:.1f}</div>
-            <span class="badge {score_color}">{score_label}</span>
-            <span class="badge info">Semáforo automático</span>
-            <div style="margin-top:0.35rem;">Leitura consolidada do confronto.</div>
-        </div>
-        """,
+<div class="metric-card" style="border-left: 5px solid {"#00ff88" if score_color == "ok" else "#ffd56a" if score_color == "warn" else "#4a9eff"};">
+<div class="section-kicker">Score Executivo</div>
+<div class="hero-score">{home_score:.1f} x {away_score:.1f}</div>
+<span class="badge {score_color}">{score_label}</span>
+<span class="badge info">Semáforo automático</span>
+<div style="margin-top:0.35rem;">Leitura consolidada do confronto.</div>
+</div>
+""",
         unsafe_allow_html=True,
     )
 
@@ -377,18 +369,18 @@ def render_last10_card(last10, team_name, accent_color):
     sparkline = "".join(spark_map.get(x, "·") for x in last10["form_sequence"].replace(" | ", ""))
     st.markdown(
         f"""
-        <div class="metric-card" style="border-left: 5px solid {accent_color};">
-            <div class="section-kicker" style="margin-bottom:0.25rem;">Últimos 10 jogos</div>
-            <h4 style="margin:0 0 8px 0;">{team_name}</h4>
-            <p style="margin:0;"><b>Forma:</b> {last10["form_sequence"]}</p>
-            <p style="margin:0;"><b>Campanha:</b> {last10["record"]}</p>
-            <p style="margin:0;"><b>Pontos:</b> {last10["points"]}/{last10["max_points"]} | <b>Win rate:</b> {last10["win_rate"]:.1f}%</p>
-            <p style="margin:0;"><b>0x1 FT:</b> {last10["target_score_count"]} em {last10["games_analyzed"]} jogos</p>
-            <p style="margin:0;"><b>Spark:</b> <span style="letter-spacing:0.14em;">{sparkline}</span></p>
-            <p style="margin:0;"><b>0x0 HT -> 75':</b> {last10["ht_00"]["stayed_score_to_75"]} estáveis | {last10["ht_00"]["changed_score_to_75"]} mudaram</p>
-            <p style="margin:0;"><b>0x1 HT -> 75':</b> {last10["ht_01"]["stayed_score_to_75"]} estáveis | {last10["ht_01"]["changed_score_to_75"]} mudaram</p>
-        </div>
-        """,
+<div class="metric-card" style="border-left: 5px solid {accent_color};">
+<div class="section-kicker" style="margin-bottom:0.25rem;">Últimos 10 jogos</div>
+<h4 style="margin:0 0 8px 0;">{team_name}</h4>
+<p style="margin:0;"><b>Forma:</b> {last10["form_sequence"]}</p>
+<p style="margin:0;"><b>Campanha:</b> {last10["record"]}</p>
+<p style="margin:0;"><b>Pontos:</b> {last10["points"]}/{last10["max_points"]} | <b>Win rate:</b> {last10["win_rate"]:.1f}%</p>
+<p style="margin:0;"><b>0x1 FT:</b> {last10["target_score_count"]} em {last10["games_analyzed"]} jogos</p>
+<p style="margin:0;"><b>Spark:</b> <span style="letter-spacing:0.14em;">{sparkline}</span></p>
+<p style="margin:0;"><b>0x0 HT -> 75':</b> {last10["ht_00"]["stayed_score_to_75"]} estáveis | {last10["ht_00"]["changed_score_to_75"]} mudaram</p>
+<p style="margin:0;"><b>0x1 HT -> 75':</b> {last10["ht_01"]["stayed_score_to_75"]} estáveis | {last10["ht_01"]["changed_score_to_75"]} mudaram</p>
+</div>
+""",
         unsafe_allow_html=True,
     )
 
@@ -398,13 +390,13 @@ def render_role_profile(profile, team_name, role_label, accent_color, xg_value):
     role_kicker = "Mandante" if role_label.lower().startswith("mand") else "Visitante"
     st.markdown(
         f"""
-        <div class="metric-card" style="border-left: 5px solid {accent_color};">
-            <div class="section-kicker">Perfil histórico</div>
-            <div class="section-heading" style="margin-bottom:0.5rem;">📌 {team_name} - {role_label}</div>
-            <span class="badge ok">Histórico</span>
-            <span class="badge info">Base: dados_historicos.csv</span>
-        </div>
-        """,
+<div class="metric-card" style="border-left: 5px solid {accent_color};">
+<div class="section-kicker">Perfil histórico</div>
+<div class="section-heading" style="margin-bottom:0.5rem;">📌 {team_name} - {role_label}</div>
+<span class="badge ok">Histórico</span>
+<span class="badge info">Base: dados_historicos.csv</span>
+</div>
+""",
         unsafe_allow_html=True,
     )
     top_row = st.columns(2)
