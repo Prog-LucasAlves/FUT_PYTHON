@@ -261,27 +261,26 @@ with main_tab:
 
                 st.markdown(
                     f"""
-                    <div style="background:#12151c; border:1px solid #1e2433; border-left:4px solid {v_color}; border-radius:6px; padding:14px 18px; margin-bottom:8px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; gap:16px;">
-                            <div style="flex:1;">
-                                <div class="mc-label">{m_data.get("League", "")} · Lay 0×1</div>
-                                <div style="font-size:1.2rem; font-weight:700; color:#e8edf4; margin:4px 0;">{m_data["Home"]} × {m_data["Away"]}</div>
-                                <span class="tag {v_tag}">{results["recommendation"]}</span>
-                                {portfolio_tag}
-                                <span class="tag tag-b">{results["score"]}/{results["max_score"]} pts</span>
-                                <span class="tag tag-b">{results["sample_quality"]}</span>
-                                <span class="tag tag-b">{str(m_data.get("Date", "")).split(" ")[0]}</span>
-                            </div>
-                            <div style="text-align:right; min-width:70px;">
-                                <div class="verdict-score" style="color:{v_color};">{results["score"]}</div>
-                                <div class="mc-label">de {results["max_score"]}</div>
-                            </div>
-                        </div>
-                        <div style="margin-top:8px; padding-top:8px; border-top:1px solid #1e2433; font-size:0.75rem; color:#5a6577; line-height:1.5;">
-                            {"  ·  ".join(results["reasons"])}
-                        </div>
-                    </div>
-                    """,
+<div style="background:#12151c; border:1px solid #1e2433; border-left:4px solid {v_color}; border-radius:6px; padding:14px 18px; margin-bottom:8px;">
+<div style="display:flex; justify-content:space-between; align-items:center; gap:16px;">
+<div style="flex:1;">
+<div class="mc-label">{m_data.get("League", "")} · Lay 0×1</div>
+<div style="font-size:1.2rem; font-weight:700; color:#e8edf4; margin:4px 0;">{m_data["Home"]} × {m_data["Away"]}</div>
+<span class="tag {v_tag}">{results["recommendation"]}</span>{portfolio_tag}
+<span class="tag tag-b">{results["score"]}/{results["max_score"]} pts</span>
+<span class="tag tag-b">{results["sample_quality"]}</span>
+<span class="tag tag-b">{str(m_data.get("Date", "")).split(" ")[0]}</span>
+</div>
+<div style="text-align:right; min-width:70px;">
+<div class="verdict-score" style="color:{v_color};">{results["score"]}</div>
+<div class="mc-label">de {results["max_score"]}</div>
+</div>
+</div>
+<div style="margin-top:8px; padding-top:8px; border-top:1px solid #1e2433; font-size:0.75rem; color:#5a6577; line-height:1.5;">
+{"  ·  ".join(results["reasons"])}
+</div>
+</div>
+""",
                     unsafe_allow_html=True,
                 )
 
@@ -320,54 +319,54 @@ with main_tab:
                     signal_c = "#00ff88" if results["poisson_0x1"] <= 7 else "#ffd54f" if results["poisson_0x1"] <= 12 else "#ff4b4b"
                     st.markdown(
                         f"""
-                        <div class="cpanel">
-                            <div class="mc-label">Distribuição de Placares</div>
-                            <div class="drow"><span class="drow-k">0×0 HT</span><span class="drow-v">{results["pct_00_ht"]:.1f}%</span></div>
-                            <div class="drow"><span class="drow-k">0×1 HT</span><span class="drow-v" style="color:#ff4b4b">{results["pct_01_ht"]:.1f}%</span></div>
-                            <div class="drow"><span class="drow-k">Outros HT</span><span class="drow-v">{results["pct_other_ht"]:.1f}%</span></div>
-                            <div class="drow"><span class="drow-k">0×0 FT</span><span class="drow-v">{results["pct_00_ft"]:.1f}%</span></div>
-                            <div class="drow"><span class="drow-k">0×1 FT</span><span class="drow-v" style="color:#ff4b4b">{results["pct_01_ft"]:.1f}%</span></div>
-                            <div class="drow"><span class="drow-k">Outros FT</span><span class="drow-v">{results["pct_other_ft"]:.1f}%</span></div>
-                            <div class="drow"><span class="drow-k">Poisson 0×1 HT</span><span class="drow-v" style="color:{signal_c}">{results["poisson_0x1"]:.2f}%</span></div>
-                            <div class="drow"><span class="drow-k">Red de 0×0 HT</span><span class="drow-v">{results["red_from_00"]:.1f}%</span></div>
-                            <div class="drow"><span class="drow-k">Red de 0×1 HT</span><span class="drow-v">{results["red_from_01"]:.1f}%</span></div>
-                        </div>
-                        """,
+<div class="cpanel">
+<div class="mc-label">Distribuição de Placares</div>
+<div class="drow"><span class="drow-k">0×0 HT</span><span class="drow-v">{results["pct_00_ht"]:.1f}%</span></div>
+<div class="drow"><span class="drow-k">0×1 HT</span><span class="drow-v" style="color:#ff4b4b">{results["pct_01_ht"]:.1f}%</span></div>
+<div class="drow"><span class="drow-k">Outros HT</span><span class="drow-v">{results["pct_other_ht"]:.1f}%</span></div>
+<div class="drow"><span class="drow-k">0×0 FT</span><span class="drow-v">{results["pct_00_ft"]:.1f}%</span></div>
+<div class="drow"><span class="drow-k">0×1 FT</span><span class="drow-v" style="color:#ff4b4b">{results["pct_01_ft"]:.1f}%</span></div>
+<div class="drow"><span class="drow-k">Outros FT</span><span class="drow-v">{results["pct_other_ft"]:.1f}%</span></div>
+<div class="drow"><span class="drow-k">Poisson 0×1 HT</span><span class="drow-v" style="color:{signal_c}">{results["poisson_0x1"]:.2f}%</span></div>
+<div class="drow"><span class="drow-k">Red de 0×0 HT</span><span class="drow-v">{results["red_from_00"]:.1f}%</span></div>
+<div class="drow"><span class="drow-k">Red de 0×1 HT</span><span class="drow-v">{results["red_from_01"]:.1f}%</span></div>
+</div>
+""",
                         unsafe_allow_html=True,
                     )
                     cs_home = results["home"]["clean_sheet_pct"]
                     cs_away = results["away"]["clean_sheet_pct"]
                     st.markdown(
                         f"""
-                        <div class="cpanel">
-                            <div class="mc-label">Clean Sheet</div>
-                            <div class="drow"><span class="drow-k">{m_data["Home"]}</span><span class="drow-v">{cs_home:.1f}%</span></div>
-                            <div class="drow"><span class="drow-k">{m_data["Away"]}</span><span class="drow-v">{cs_away:.1f}%</span></div>
-                        </div>
-                        """,
+<div class="cpanel">
+<div class="mc-label">Clean Sheet</div>
+<div class="drow"><span class="drow-k">{m_data["Home"]}</span><span class="drow-v">{cs_home:.1f}%</span></div>
+<div class="drow"><span class="drow-k">{m_data["Away"]}</span><span class="drow-v">{cs_away:.1f}%</span></div>
+</div>
+""",
                         unsafe_allow_html=True,
                     )
 
                 with tac_r:
                     st.markdown(
                         f"""
-                        <div class="cpanel" style="border-left:3px solid #00ff88;">
-                            <div class="mc-label">Saída Primária</div>
-                            <div class="drow"><span class="drow-k">Hedge alvo</span><span class="drow-v" style="color:#00ff88">{risk_plan["adjusted_exit"]}'</span></div>
-                            <div class="drow"><span class="drow-k">Base histórica</span><span class="drow-v">{risk_plan["base_exit"]}'</span></div>
-                            <div class="drow"><span class="drow-k">Confiança</span><span class="drow-v">{risk_plan["confidence"]}</span></div>
-                        </div>
-                        <div class="cpanel" style="border-left:3px solid #ffd54f;">
-                            <div class="mc-label">Zona de Decisão</div>
-                            <div class="drow"><span class="drow-k">Faixa</span><span class="drow-v">{risk_plan["risk_band"]}</span></div>
-                            <div style="font-size:0.72rem; color:#4f5b6e; margin-top:3px;">0×0: manter até alvo · 0×1 no HT: stop antecipado</div>
-                        </div>
-                        <div class="cpanel" style="border-left:3px solid #ff4b4b;">
-                            <div class="mc-label">Stop Loss</div>
-                            <div style="font-size:0.72rem; color:#4f5b6e;">{risk_plan["hedge_note"]}</div>
-                            <div style="font-size:0.72rem; color:#4f5b6e; margin-top:2px;">{risk_plan["stop_note"]}</div>
-                        </div>
-                        """,
+<div class="cpanel" style="border-left:3px solid #00ff88;">
+<div class="mc-label">Saída Primária</div>
+<div class="drow"><span class="drow-k">Hedge alvo</span><span class="drow-v" style="color:#00ff88">{risk_plan["adjusted_exit"]}'</span></div>
+<div class="drow"><span class="drow-k">Base histórica</span><span class="drow-v">{risk_plan["base_exit"]}'</span></div>
+<div class="drow"><span class="drow-k">Confiança</span><span class="drow-v">{risk_plan["confidence"]}</span></div>
+</div>
+<div class="cpanel" style="border-left:3px solid #ffd54f;">
+<div class="mc-label">Zona de Decisão</div>
+<div class="drow"><span class="drow-k">Faixa</span><span class="drow-v">{risk_plan["risk_band"]}</span></div>
+<div style="font-size:0.72rem; color:#4f5b6e; margin-top:3px;">0×0: manter até alvo · 0×1 no HT: stop antecipado</div>
+</div>
+<div class="cpanel" style="border-left:3px solid #ff4b4b;">
+<div class="mc-label">Stop Loss</div>
+<div style="font-size:0.72rem; color:#4f5b6e;">{risk_plan["hedge_note"]}</div>
+<div style="font-size:0.72rem; color:#4f5b6e; margin-top:2px;">{risk_plan["stop_note"]}</div>
+</div>
+""",
                         unsafe_allow_html=True,
                     )
 
@@ -382,13 +381,13 @@ with main_tab:
                         cs_risk_icon = "🔴" if h2h_stats["score_0x1_pct"] > 10 else "🟡" if h2h_stats["score_0x1_pct"] > 5 else "🟢"
                         st.markdown(
                             f"""
-                            <div class="cpanel">
-                                <div class="mc-label">H2H — {h2h_stats["total"]} jogos</div>
-                                <div class="drow"><span class="drow-k">0×1 FT</span><span class="drow-v">{h2h_stats["score_0x1"]} ({h2h_stats["score_0x1_pct"]:.1f}%) {cs_risk_icon}</span></div>
-                                <div class="drow"><span class="drow-k">1×0 FT</span><span class="drow-v">{h2h_stats["score_1x0"]} ({(h2h_stats["score_1x0"] / h2h_stats["total"]) * 100:.1f}%)</span></div>
-                                <div class="drow"><span class="drow-k">0×0 FT</span><span class="drow-v">{h2h_stats["score_0x0"]} ({(h2h_stats["score_0x0"] / h2h_stats["total"]) * 100:.1f}%)</span></div>
-                            </div>
-                            """,
+<div class="cpanel">
+    <div class="mc-label">H2H — {h2h_stats["total"]} jogos</div>
+    <div class="drow"><span class="drow-k">0×1 FT</span><span class="drow-v">{h2h_stats["score_0x1"]} ({h2h_stats["score_0x1_pct"]:.1f}%) {cs_risk_icon}</span></div>
+    <div class="drow"><span class="drow-k">1×0 FT</span><span class="drow-v">{h2h_stats["score_1x0"]} ({(h2h_stats["score_1x0"] / h2h_stats["total"]) * 100:.1f}%)</span></div>
+    <div class="drow"><span class="drow-k">0×0 FT</span><span class="drow-v">{h2h_stats["score_0x0"]} ({(h2h_stats["score_0x0"] / h2h_stats["total"]) * 100:.1f}%)</span></div>
+</div>
+""",
                             unsafe_allow_html=True,
                         )
                         h2h_scores_df = pd.DataFrame(list(h2h_stats["top_scores"].items()), columns=["Placar", "Freq %"]).sort_values("Freq %", ascending=False)
@@ -403,14 +402,14 @@ with main_tab:
                     a_sc = "#00ff88" if results["lay_strength_away"] >= 60 else "#ffd54f" if results["lay_strength_away"] >= 45 else "#ff4b4b"
                     st.markdown(
                         f"""
-                        <div class="cpanel">
-                            <div class="mc-label">Índice Anti-0×1</div>
-                            <div class="drow"><span class="drow-k">{m_data["Home"]}</span><span class="drow-v" style="color:{h_sc}">{results["lay_strength_home"]:.1f} · {results["lay_strength_home_label"]}</span></div>
-                            <div class="drow"><span class="drow-k">Variância H</span><span class="drow-v">{results["lay_var_home"]:.1f} · {results["lay_var_home_label"]}</span></div>
-                            <div class="drow"><span class="drow-k">{m_data["Away"]}</span><span class="drow-v" style="color:{a_sc}">{results["lay_strength_away"]:.1f} · {results["lay_strength_away_label"]}</span></div>
-                            <div class="drow"><span class="drow-k">Variância A</span><span class="drow-v">{results["lay_var_away"]:.1f} · {results["lay_var_away_label"]}</span></div>
-                        </div>
-                        """,
+<div class="cpanel">
+    <div class="mc-label">Índice Anti-0×1</div>
+    <div class="drow"><span class="drow-k">{m_data["Home"]}</span><span class="drow-v" style="color:{h_sc}">{results["lay_strength_home"]:.1f} · {results["lay_strength_home_label"]}</span></div>
+    <div class="drow"><span class="drow-k">Variância H</span><span class="drow-v">{results["lay_var_home"]:.1f} · {results["lay_var_home_label"]}</span></div>
+    <div class="drow"><span class="drow-k">{m_data["Away"]}</span><span class="drow-v" style="color:{a_sc}">{results["lay_strength_away"]:.1f} · {results["lay_strength_away_label"]}</span></div>
+    <div class="drow"><span class="drow-k">Variância A</span><span class="drow-v">{results["lay_var_away"]:.1f} · {results["lay_var_away_label"]}</span></div>
+</div>
+""",
                         unsafe_allow_html=True,
                     )
                     x1, x2 = st.columns(2)
@@ -438,11 +437,11 @@ with main_tab:
                 with st.expander("💰 Registrar Aposta", expanded=False):
                     st.markdown(
                         f"""
-                        <div class="mc-label">Aposta</div>
-                        <div style="font-size:1rem; font-weight:600; color:#d4dbe8;">{m_data["Home"]} × {m_data["Away"]}</div>
-                        <span class="tag tag-b">Lay 0×1</span>
-                        <span class="tag tag-g">{m_data.get("League", "")}</span>
-                        """,
+<div class="mc-label">Aposta</div>
+<div style="font-size:1rem; font-weight:600; color:#d4dbe8;">{m_data["Home"]} × {m_data["Away"]}</div>
+<span class="tag tag-b">Lay 0×1</span>
+<span class="tag tag-g">{m_data.get("League", "")}</span>
+""",
                         unsafe_allow_html=True,
                     )
                     with st.form(key=f"bet_form_lay01_{m_data['Home']}_{m_data['Away']}"):

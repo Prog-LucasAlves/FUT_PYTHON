@@ -623,6 +623,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
         prob_red_from_01 = ((h_red_01 + a_red_01) / total_01_ht * 100) if total_01_ht > 0 else 0
         return prob_red_from_00, prob_red_from_01
 
+    h2h_stats = get_h2h_stats(df_games, home_team, away_team, normalize_team_name_fn)
     red_00, red_01 = analyze_ht_scenarios(home_h, away_a, norm_h, norm_a)
 
     # Normalize combined perspective for HT/FT percentages
@@ -653,52 +654,78 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
     score = 0
     reasons = []
     odd_h_back = current_match_data.get("Odd_H_Back", 0)
-    odd_a_back = current_match_data.get("Odd_A_Back", 0)
     odd_lay_0x1 = current_match_data.get("Odd_CS_0x1_Lay", 0)
     odd_btts = current_match_data.get("Odd_BTTS_Yes_Back", 0)
     odd_over25 = current_match_data.get("Odd_Over25_FT_Back", 0)
-    odds_rules = [
-        {"name": "Faixa 1", "match": (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.99) and (odd_lay_0x1 >= 20.00)},
-        {"name": "Faixa 2", "match": (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.99) and (13.00 <= odd_lay_0x1 <= 13.90)},
-        {"name": "Faixa 3", "match": (2.10 <= odd_h_back <= 2.49) and (3.50 <= odd_a_back <= 3.90) and (12.00 <= odd_lay_0x1 <= 12.90)},
-        {"name": "Faixa 4", "match": (1.80 <= odd_h_back <= 2.09) and (4.00 <= odd_a_back <= 4.99) and (18.00 <= odd_lay_0x1 <= 19.90)},
-        {"name": "Faixa 5", "match": (2.10 <= odd_h_back <= 2.49) and (3.50 <= odd_a_back <= 3.99) and (15.00 <= odd_lay_0x1 <= 15.90)},
-        {"name": "Faixa 6", "match": (2.50 <= odd_h_back <= 2.99) and (2.50 <= odd_a_back <= 2.99) and (11.00 <= odd_lay_0x1 <= 11.90)},
-        {"name": "Faixa 7", "match": (1.80 <= odd_h_back <= 2.09) and (odd_a_back >= 5.00) and (15.00 <= odd_lay_0x1 <= 15.90)},
-        {"name": "Faixa 8", "match": (1.80 <= odd_h_back <= 2.09) and (odd_a_back >= 5.00) and (14.00 <= odd_lay_0x1 <= 14.90)},
-        {"name": "Faixa 9", "match": (2.10 <= odd_h_back <= 2.49) and (4.00 <= odd_a_back <= 4.99) and (11.00 <= odd_lay_0x1 <= 11.90)},
-        {"name": "Faixa 10", "match": (2.10 <= odd_h_back <= 2.49) and (3.50 <= odd_a_back <= 3.99) and (16.00 <= odd_lay_0x1 <= 17.90)},
+
+    # --- LÓGICA DE BINS (BASEADO NO TEBF005.PY) ---
+    def get_bin(val, bins, labels):
+        for i in range(len(bins) - 1):
+            if bins[i] < val <= bins[i + 1]:
+                return labels[i]
+        return labels[-1]
+
+    # Média de gols do mandante APENAS em casa (para o Bin_Avg_H)
+    home_only_games = home_h[home_h["Norm_Home"] == norm_h]
+    home_avg_at_home = home_only_games["Goals_H_FT"].mean() if not home_only_games.empty else stats_h["mean"]
+
+    bin_h = get_bin(odd_h_back, [1.0, 1.3, 1.5, 1.7, 2.0, 2.5, 3.0, 100], ["<1.3", "1.3-1.5", "1.5-1.7", "1.7-2.0", "2.1-2.5", "2.6-3.0", "3.0+"])
+    bin_over = get_bin(odd_over25, [0, 1.6, 1.8, 2.0, 100], ["<1.6", "1.6-1.8", "1.8-2.0", "2.0+"])
+    bin_btts = get_bin(odd_btts, [0, 1.6, 1.8, 2.0, 100], ["<1.6", "1.6-1.8", "1.8-2.0", "2.0+"])
+    bin_lay = get_bin(odd_lay_0x1, [0, 10, 15, 20, 30, 100], ["<10", "10-15", "15-20", "20-30", "30+"])
+    bin_avg_h = get_bin(home_avg_at_home, [0, 1.2, 1.5, 1.8, 5.0], ["<1.2", "1.2-1.5", "1.5-1.8", "1.8+"])
+
+    winning_brackets = [
+        ("2.1-2.5", "2.0+", "1.8-2.0", "10-15", "1.2-1.5"),
+        ("1.7-2.0", "2.0+", "2.0+", "15-20", "1.2-1.5"),
+        ("2.1-2.5", "1.6-1.8", "1.6-1.8", "15-20", "1.8+"),
+        ("2.1-2.5", "1.8-2.0", "1.6-1.8", "10-15", "1.2-1.5"),
+        ("<1.3", "<1.6", "1.8-2.0", "30+", "1.8+"),
+        ("1.5-1.7", "2.0+", "2.0+", "15-20", "1.5-1.8"),
+        ("1.3-1.5", "1.8-2.0", "2.0+", "20-30", "1.5-1.8"),
+        ("3.0+", "1.8-2.0", "1.6-1.8", "10-15", "1.8+"),
+        ("1.3-1.5", "<1.6", "1.8-2.0", "30+", "1.8+"),
+        ("3.0+", "2.0+", "2.0+", "<10", "1.5-1.8"),
     ]
-    matching_odds_rules = [rule["name"] for rule in odds_rules if rule["match"]]
-    if matching_odds_rules:
-        score += 5
-        reasons.append(f"Padrão de Odds Detectado (Match Odds + Lay 0x1): {', '.join(matching_odds_rules)}")
-    if 0 < odd_btts < 1.90:
-        score += 2
-        reasons.append(f"Odd BTTS baixa ({odd_btts:.2f}): Tendência de ambos marcarem")
-    if 0 < odd_over25 < 1.90:
-        score += 1
-        reasons.append(f"Odd Over 2.5 baixa ({odd_over25:.2f}): Expectativa de gols")
-    # Tem que ser para o visitante, pois o mandante é o que se espera que tenha mais gols.
-    # Se o mandante tem alta variância, é um sinal de que pode ser inconsistente e acabar
-    # com placares magros, o que é bom para o Lay 0x1. Se for o visitante, a alta variância
-    # pode indicar que ele tem jogos com muitos gols, o que não é bom para o Lay 0x1.
-    if stats_a["variance"] > 1.0:
-        score += 1
-        reasons.append(f"Variância Visitante Alta ({stats_a['variance']:.2f}): Time inconsistente (Bom para Lay)")
-    if stats_h["cost"] > 1.2:
-        score += 1
-        reasons.append(f"Custo do Gol Mandante Alto ({stats_h['cost']:.2f}): Dificuldade em manter placares magros")
-    if stats_h["avg_xg"] > 1.5:
-        score += 1
-        reasons.append(f"xG Mandante alto ({stats_h['avg_xg']:.2f}): Forte produção ofensiva")
+
+    is_portfolio_match = (bin_h, bin_over, bin_btts, bin_lay, bin_avg_h) in winning_brackets
+
+    # 1. Padrão de Portfolio - Golden Branch (Peso 8)
+    # Reflete o match completo dos 5 Bins (Odd H, Over, BTTS, Lay, Avg Goals H)
+    if is_portfolio_match:
+        score += 8
+        reasons.append("Match de Portfolio Detectado (Golden Branch): DNA lucrativo confirmado (Bins)")
+
+    # 2. Heurística Poisson HT (Peso 2)
     if poisson_0x1_ht < 7:
         score += 2
         reasons.append(f"Baixa probabilidade Poisson no HT ({poisson_0x1_ht:.1f}%)")
-    heuristic_success = poisson_0x1_ht
-    if heuristic_success > 12:
+    elif poisson_0x1_ht < 12:
         score += 1
-        reasons.append(f"Sinal heurístico forte no HT ({heuristic_success:.1f}%)")
+        reasons.append(f"Heurística Poisson Moderada no HT ({poisson_0x1_ht:.1f}%)")
+
+    # 3. H2H (Peso 1)
+    if h2h_stats and h2h_stats.get("score_0x1_pct", 100) <= 10:
+        score += 1
+        reasons.append(f"Histórico Direto Favorável (0x1 em apenas {h2h_stats['score_0x1_pct']:.1f}% dos jogos)")
+
+    # 4. Clean Sheet Mandante (Peso 1)
+    if stats_h["clean_sheet_pct"] >= 25:
+        score += 1
+        reasons.append(f"Clean Sheet Mandante Robusto ({stats_h['clean_sheet_pct']:.1f}%): Dificuldade do visitante marcar")
+
+    # 5. Força do Mandante (Peso 1+1+1)
+    if stats_h["avg_ppg"] >= 1.6:
+        score += 1
+        reasons.append(f"PPG Mandante sólido ({stats_h['avg_ppg']:.2f}): Superioridade técnica")
+    if stats_h["avg_xg"] > 1.5:
+        score += 1
+        reasons.append(f"xG Mandante alto ({stats_h['avg_xg']:.2f}): Forte produção ofensiva")
+    if stats_h["cost"] > 1.2:
+        score += 1
+        reasons.append(f"Custo do Gol Mandante Alto ({stats_h['cost']:.2f}): Eficiência em evitar placares magros adversários")
+
+    # 6. Qualidade da Amostra (Peso 1)
     if sample_quality == "Boa":
         score += 1
         reasons.append("Amostra histórica boa: leitura mais confiável")
@@ -730,7 +757,7 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
         "lay_var_away_desc": describe_variance(classify_variance(lay01_var_away), "visitante"),
         "poisson_0x1": poisson_0x1_ht,
         "poisson_0x1_label": "Heurística Poisson HT",
-        "heuristic_success": heuristic_success,
+        "heuristic_success": poisson_0x1_ht,
         "heuristic_success_label": "Heurística Poisson HT",
         "h_games": home_h,
         "a_games": away_a,
