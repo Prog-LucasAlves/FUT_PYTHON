@@ -112,6 +112,11 @@ def load_historical_data():
         return pd.DataFrame()
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.dropna(subset=["Goals_H_FT", "Goals_A_FT"])
+
+    # Aplicar mapeamento de nomes para garantir consistência (ex: Manchester City -> Man City)
+    df["Home"] = df["Home"].apply(map_team_name)
+    df["Away"] = df["Away"].apply(map_team_name)
+
     df["Norm_Home"] = df["Home"].apply(normalize_team_name)
     df["Norm_Away"] = df["Away"].apply(normalize_team_name)
 

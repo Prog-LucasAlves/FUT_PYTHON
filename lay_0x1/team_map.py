@@ -7,6 +7,7 @@ FOOTYSTATS_TEAM_MAP = {
     "Athletic Club Bilbao": "Ath Bilbao",
     "Atlético GO": "Atletico GO",
     "Atlético Madrid": "Atl. Madrid",
+    "Atletico Madrid": "Atl. Madrid",
     "Atlético PR": "Athletico-PR",
     "Bayern München": "Bayern Munich",
     "Boavista FC": "Boavista",
@@ -94,6 +95,7 @@ FOOTYSTATS_TEAM_MAP = {
     "Athletic Bilbao": "Ath Bilbao",
     "Oviedo": "R. Oviedo",
     "Estoril Praia": "Estoril",
+    "Manchester City": "Man City",
 }
 
 
