@@ -135,7 +135,9 @@ date_selected = st.sidebar.date_input(
     value=DEFAULT_DATE,
 )
 
-leagues = sorted(df_hist["League"].unique().tolist())
+leagues = sorted([str(league) for league in df_hist["League"].dropna().unique()])
+
+
 selected_leagues = st.sidebar.multiselect("Ligas", leagues, default=[])
 
 with st.sidebar.expander("Nomes desconhecidos", expanded=False):

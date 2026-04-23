@@ -219,6 +219,13 @@ def get_goal_interval_stats(df_games, home_team, away_team, normalize_team_name_
     a_games = df_games[(df_games["Norm_Home"] == norm_a) | (df_games["Norm_Away"] == norm_a)].copy()
     intervals = [(0, 15), (15, 30), (30, 45), (45, 60), (60, 75), (75, 90)]
 
+    def ensure_list(x):
+        if isinstance(x, list):
+            return x
+        if isinstance(x, (set, dict)):
+            return list(x)
+        return []
+
     def calc_interval_pct(games, team_norm):
         result = {}
         total = len(games)
@@ -227,7 +234,7 @@ def get_goal_interval_stats(df_games, home_team, away_team, normalize_team_name_
         for start, end in intervals:
             label = f"{start}-{end}'"
             count = games.apply(
-                lambda row: any((m := normalize_goal_minute_fn(x)) is not None and start < m <= end for x in (row["Min_Goals_H"] if row["Norm_Home"] == team_norm else row["Min_Goals_A"])),
+                lambda row: any((m := normalize_goal_minute_fn(x)) is not None and start < m <= end for x in ensure_list(row["Min_Goals_H"] if row["Norm_Home"] == team_norm else row["Min_Goals_A"])),
                 axis=1,
             ).sum()
             result[label] = (count / total) * 100
@@ -240,7 +247,7 @@ def get_goal_interval_stats(df_games, home_team, away_team, normalize_team_name_
             return {f"{a}-{b}'": 0.0 for a, b in intervals}
         for start, end in intervals:
             label = f"{start}-{end}'"
-            count = games.apply(lambda row: any((m := normalize_goal_minute_fn(x)) is not None and start < m <= end for x in (row["Min_Goals_H"] + row["Min_Goals_A"])), axis=1).sum()
+            count = games.apply(lambda row: any((m := normalize_goal_minute_fn(x)) is not None and start < m <= end for x in (ensure_list(row["Min_Goals_H"]) + ensure_list(row["Min_Goals_A"]))), axis=1).sum()
             result[label] = (count / total) * 100
         return result
 
@@ -299,9 +306,13 @@ def analyze_goal_timing(df_games, home_team, away_team, normalize_team_name_fn=n
     def get_frequent_scores(games, team_norm):
         def process_scores(df, suffix):
             def get_score_view(row):
+                gh = row[f"Goals_H_{suffix}"]
+                ga = row[f"Goals_A_{suffix}"]
+                if pd.isnull(gh) or pd.isnull(ga):
+                    return "N/A"
                 if row["Norm_Home"] == team_norm:
-                    return f"{int(row[f'Goals_H_{suffix}'])}x{int(row[f'Goals_A_{suffix}'])}"
-                return f"{int(row[f'Goals_A_{suffix}'])}x{int(row[f'Goals_H_{suffix}'])}"
+                    return f"{int(gh)}x{int(ga)}"
+                return f"{int(ga)}x{int(gh)}"
 
             scores = df.apply(get_score_view, axis=1)
             return (scores.value_counts(normalize=True) * 100).head(5).to_dict()
@@ -309,24 +320,48 @@ def analyze_goal_timing(df_games, home_team, away_team, normalize_team_name_fn=n
         return {"HT": process_scores(games, "HT"), "FT": process_scores(games, "FT")}
 
     def get_timing_stats(games, team_norm):
+        def ensure_list(x):
+            if isinstance(x, list):
+                return x
+            if isinstance(x, (set, dict)):
+                return list(x)
+            return []
+
+        def normalize_mins_list(mins_list):
+            return [m for m in (normalize_goal_minute_fn(m) for m in mins_list) if m is not None]
+
         def get_team_mins(row):
-            return row["Min_Goals_H"] if row["Norm_Home"] == team_norm else row["Min_Goals_A"]
+            mins = row["Min_Goals_H"] if row["Norm_Home"] == team_norm else row["Min_Goals_A"]
+            return normalize_mins_list(ensure_list(mins))
 
         team_mins = games.apply(get_team_mins, axis=1)
         first_goal_team = team_mins.apply(lambda x: min(x) if len(x) > 0 else None).dropna()
-        first_goal_match = games.apply(lambda row: min(row["Min_Goals_H"] + row["Min_Goals_A"]) if len(row["Min_Goals_H"] + row["Min_Goals_A"]) > 0 else None, axis=1).dropna()
+
+        def get_match_mins(row):
+            combined = ensure_list(row["Min_Goals_H"]) + ensure_list(row["Min_Goals_A"])
+            return normalize_mins_list(combined)
+
+        match_mins = games.apply(get_match_mins, axis=1)
+        first_goal_match = match_mins.apply(lambda x: min(x) if len(x) > 0 else None).dropna()
+
         games_00_ht = games[(games["Goals_H_HT"] == 0) & (games["Goals_A_HT"] == 0)]
 
         def first_in_2h(mins_list):
-            m2h = [m for m in (normalize_goal_minute_fn(m) for m in mins_list) if m is not None and m > 45]
+            m2h = [m for m in mins_list if m > 45]
             return min(m2h) if len(m2h) > 0 else None
 
         first_team_2h = games_00_ht.apply(get_team_mins, axis=1).apply(first_in_2h).dropna()
-        first_match_2h = games_00_ht.apply(
-            lambda row: min([m for m in (normalize_goal_minute_fn(m) for m in (row["Min_Goals_H"] + row["Min_Goals_A"])) if m is not None and m > 45]) if len([m for m in (normalize_goal_minute_fn(m) for m in (row["Min_Goals_H"] + row["Min_Goals_A"])) if m is not None and m > 45]) > 0 else None,
-            axis=1,
-        ).dropna()
-        return {"avg_first_team": first_goal_team.mean(), "avg_first_match": first_goal_match.mean(), "avg_team_2h_00ht": first_team_2h.mean(), "avg_match_2h_00ht": first_match_2h.mean(), "sample_size": len(games), "sample_00ht": len(games_00_ht), "raw_first_team": first_goal_team.tolist()}
+        first_match_2h = games_00_ht.apply(get_match_mins, axis=1).apply(first_in_2h).dropna()
+
+        return {
+            "avg_first_team": float(first_goal_team.mean()) if not first_goal_team.empty else None,
+            "avg_first_match": float(first_goal_match.mean()) if not first_goal_match.empty else None,
+            "avg_team_2h_00ht": float(first_team_2h.mean()) if not first_team_2h.empty else None,
+            "avg_match_2h_00ht": float(first_match_2h.mean()) if not first_match_2h.empty else None,
+            "sample_size": len(games),
+            "sample_00ht": len(games_00_ht),
+            "raw_first_team": [int(x) for x in first_goal_team.tolist()],
+        }
 
     if len(h_games) == 0 or len(a_games) == 0:
         return None, None, None
@@ -334,10 +369,20 @@ def analyze_goal_timing(df_games, home_team, away_team, normalize_team_name_fn=n
     stats_a = get_timing_stats(a_games, norm_a)
     stats_h["frequent_scores"] = get_frequent_scores(h_games, norm_h)
     stats_a["frequent_scores"] = get_frequent_scores(a_games, norm_a)
+
+    def get_combined_score_stats(h_df, a_df, suffix):
+        combined = pd.concat([h_df, a_df])
+        valid = combined.dropna(subset=[f"Goals_H_{suffix}", f"Goals_A_{suffix}"])
+        if valid.empty:
+            return {}
+        scores = valid[f"Goals_H_{suffix}"].astype(int).astype(str) + "x" + valid[f"Goals_A_{suffix}"].astype(int).astype(str)
+        return (scores.value_counts(normalize=True).head(5) * 100).to_dict()
+
     stats_combined_scores = {
-        "HT": (pd.concat([h_games, a_games])["Goals_H_HT"].astype(int).astype(str) + "x" + pd.concat([h_games, a_games])["Goals_A_HT"].astype(int).astype(str)).value_counts(normalize=True).head(5).mul(100).to_dict(),
-        "FT": (pd.concat([h_games, a_games])["Goals_H_FT"].astype(int).astype(str) + "x" + pd.concat([h_games, a_games])["Goals_A_FT"].astype(int).astype(str)).value_counts(normalize=True).head(5).mul(100).to_dict(),
+        "HT": get_combined_score_stats(h_games, a_games, "HT"),
+        "FT": get_combined_score_stats(h_games, a_games, "FT"),
     }
+
     return stats_h, stats_a, stats_combined_scores
 
 
@@ -499,7 +544,8 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
         mean_goals = goals.mean()
         mean_goals_ht = goals_ht.mean()
         variance = goals.var()
-        first_goal_mins = mins.apply(lambda x: normalize_goal_minute(x[0]) if len(x) > 0 else None).dropna()
+        first_goal_mins = mins.apply(lambda x: normalize_goal_minute(list(x)[0]) if (isinstance(x, (list, set, tuple)) and len(x) > 0) else None).dropna()
+
         avg_first_goal = first_goal_mins.mean() if not first_goal_mins.empty else 0
         cost_of_goal = (variance / (mean_goals + 0.001)) if mean_goals > 0 else 0
         avg_xg = games.apply(lambda r: get_team_val(r, "xG_H", "xG_A"), axis=1).mean()
@@ -594,8 +640,17 @@ def calculate_pro_metrics(df_games, home_team, away_team, current_match_data, no
 
     def _normalize_goals(games, team_norm, suffix):
         """Return (team_goals, opp_goals) series for the given suffix (HT or FT), normalized to team perspective."""
-        team_g = games.apply(lambda r: int(r[f"Goals_H_{suffix}"]) if r["Norm_Home"] == team_norm else int(r[f"Goals_A_{suffix}"]), axis=1)
-        opp_g = games.apply(lambda r: int(r[f"Goals_A_{suffix}"]) if r["Norm_Home"] == team_norm else int(r[f"Goals_H_{suffix}"]), axis=1)
+
+        def get_int(val):
+            try:
+                if pd.isna(val):
+                    return 0
+                return int(float(val))
+            except:
+                return 0
+
+        team_g = games.apply(lambda r: get_int(r[f"Goals_H_{suffix}"]) if r["Norm_Home"] == team_norm else get_int(r[f"Goals_A_{suffix}"]), axis=1)
+        opp_g = games.apply(lambda r: get_int(r[f"Goals_A_{suffix}"]) if r["Norm_Home"] == team_norm else get_int(r[f"Goals_H_{suffix}"]), axis=1)
         return team_g, opp_g
 
     def analyze_ht_scenarios(games_h, games_a, norm_h_val, norm_a_val):
