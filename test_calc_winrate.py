@@ -14,6 +14,7 @@ from calc_winrate import get_score_at_75  # noqa: E402
 
 
 
+
 def side_effect_isna(val):
     import math
 
@@ -29,8 +30,12 @@ def side_effect_isna(val):
 
 
 
+
 mock_pd.isna.side_effect = side_effect_isna
 
+improve-testing-data-utils-5532844099891188372
+from calc_winrate import get_score_at_75
+=======
 test-integration-main-getDataTotalBetfair-8008597018345525812
 from calc_winrate import get_score_at_75  # noqa: E402
 
@@ -72,6 +77,8 @@ main
 main
 main
 main
+main
+
 
 def test_get_score_at_75_null_cases():
     assert get_score_at_75(None) == 0
