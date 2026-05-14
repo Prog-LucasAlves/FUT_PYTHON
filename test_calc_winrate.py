@@ -13,6 +13,7 @@ from calc_winrate import get_score_at_75  # noqa: E402
 
 
 
+
 def side_effect_isna(val):
     import math
 
@@ -27,8 +28,13 @@ def side_effect_isna(val):
 
 
 
+
 mock_pd.isna.side_effect = side_effect_isna
 
+test-integration-main-getDataTotalBetfair-8008597018345525812
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
 test-normalize-goal-minute-15310691816714300964
 from calc_winrate import get_score_at_75  # noqa: E402
 
@@ -60,6 +66,7 @@ def mock_pandas_isna():
             yield
  main
 
+main
 main
 main
 main
