@@ -134,11 +134,31 @@ def get_last_10_team_summary(
 
     team_games = team_games.sort_values("Date", ascending=False).head(10).copy()
 
+perf/vectorize-apply-calls-8078529625125405622
+    is_home = team_games["Norm_Home"] == team_norm
+    goals_for = np.where(is_home, team_games["Goals_H_FT"], team_games["Goals_A_FT"]).astype(int)
+    goals_against = np.where(is_home, team_games["Goals_A_FT"], team_games["Goals_H_FT"]).astype(int)
+
+    results = np.where(
+        goals_for > goals_against,
+        "V",
+        np.where(goals_for == goals_against, "E", "D"),
+    )
+    results = pd.Series(results, index=team_games.index)
+
+    points = np.where(
+        goals_for > goals_against,
+        3,
+        np.where(goals_for == goals_against, 1, 0),
+    )
+    points = pd.Series(points, index=team_games.index)
+=======
     summaries = team_games.apply(lambda row: _summarize_match(row, team_norm), axis=1)
     goals_for = summaries.apply(lambda x: x[0])
     goals_against = summaries.apply(lambda x: x[1])
     results = summaries.apply(lambda x: x[2])
     points = summaries.apply(lambda x: x[3])
+main
 
     wins = int((results == "V").sum())
     draws = int((results == "E").sum())
@@ -150,10 +170,20 @@ def get_last_10_team_summary(
 refactor-get-last-10-team-summary-7786808499042491964
 =======
     def build_ht_scenario_summary(df, ht_score):
+perf/vectorize-apply-calls-8078529625125405622
+        is_home_df = df["Norm_Home"] == team_norm
+        team_ht = np.where(is_home_df, df["Goals_H_HT"], df["Goals_A_HT"])
+        opp_ht = np.where(is_home_df, df["Goals_A_HT"], df["Goals_H_HT"])
+
+        scenario_mask = (team_ht == ht_score[0]) & (opp_ht == ht_score[1])
+        scenario_games = df[scenario_mask].copy()
+
+=======
         is_home = df["Norm_Home"] == team_norm
         home_match = is_home & (df["Goals_H_HT"] == ht_score[0]) & (df["Goals_A_HT"] == ht_score[1])
         away_match = (~is_home) & (df["Goals_A_HT"] == ht_score[0]) & (df["Goals_H_HT"] == ht_score[1])
         scenario_games = df[home_match | away_match].copy()
+main
         if scenario_games.empty:
             return {
                 "total": 0,
@@ -163,20 +193,14 @@ refactor-get-last-10-team-summary-7786808499042491964
                 "changed_score_to_75": 0,
             }
 
-        def score_until_75(row):
-            if row["Norm_Home"] == team_norm:
-                return count_goals_until(row["Min_Goals_H"], 75), count_goals_until(
-                    row["Min_Goals_A"],
-                    75,
-                )
-            return count_goals_until(row["Min_Goals_A"], 75), count_goals_until(
-                row["Min_Goals_H"],
-                75,
-            )
+        is_home_scenario = scenario_games["Norm_Home"] == team_norm
 
-        scores_75 = scenario_games.apply(score_until_75, axis=1)
-        team_scores_75 = scores_75.apply(lambda x: x[0])
-        opp_scores_75 = scores_75.apply(lambda x: x[1])
+        team_mins = np.where(is_home_scenario, scenario_games["Min_Goals_H"], scenario_games["Min_Goals_A"])
+        opp_mins = np.where(is_home_scenario, scenario_games["Min_Goals_A"], scenario_games["Min_Goals_H"])
+
+        team_scores_75 = np.array([count_goals_until(m, 75) for m in team_mins])
+        opp_scores_75 = np.array([count_goals_until(m, 75) for m in opp_mins])
+
         stayed_mask = (team_scores_75 == ht_score[0]) & (opp_scores_75 == ht_score[1])
 
         return {
