@@ -5,6 +5,7 @@ import pytest
 from calc_winrate import get_score_at_75
 
 
+
 def side_effect_isna(val):
     import math
 
@@ -14,12 +15,19 @@ def side_effect_isna(val):
         return True
     return False
 
+ code-health-refactor-load-historical-data-8712844606160724658
+
+mock_pd.isna.side_effect = side_effect_isna
+
+from calc_winrate import get_score_at_75  # noqa: E402
+=======
 
 @pytest.fixture(autouse=True)
 def mock_pandas_isna():
     with patch("pandas.isna", side_effect=side_effect_isna):
         with patch("pandas.NA", "PD_NA"):
             yield
+ main
 
 
 def test_get_score_at_75_null_cases():
