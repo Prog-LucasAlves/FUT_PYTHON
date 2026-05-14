@@ -106,12 +106,10 @@ def get_last_10_team_summary(
     max_points = total_games * 3
 
     def build_ht_scenario_summary(df, ht_score):
-        def match_ht_score(row):
-            if row["Norm_Home"] == team_norm:
-                return row["Goals_H_HT"] == ht_score[0] and row["Goals_A_HT"] == ht_score[1]
-            return row["Goals_A_HT"] == ht_score[0] and row["Goals_H_HT"] == ht_score[1]
-
-        scenario_games = df[df.apply(match_ht_score, axis=1)].copy()
+        is_home = df["Norm_Home"] == team_norm
+        home_match = is_home & (df["Goals_H_HT"] == ht_score[0]) & (df["Goals_A_HT"] == ht_score[1])
+        away_match = (~is_home) & (df["Goals_A_HT"] == ht_score[0]) & (df["Goals_H_HT"] == ht_score[1])
+        scenario_games = df[home_match | away_match].copy()
         if scenario_games.empty:
             return {
                 "total": 0,
