@@ -11,6 +11,7 @@ from calc_winrate import get_score_at_75  # noqa: E402
 
 
 
+
 def side_effect_isna(val):
     import math
 
@@ -23,8 +24,13 @@ def side_effect_isna(val):
 
 
 
+
 mock_pd.isna.side_effect = side_effect_isna
 
+add-tests-data-utils-14826260309306633571
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
 remove-unused-render-badge-10106806103153642180
 from calc_winrate import get_score_at_75  # noqa: E402
 
@@ -48,6 +54,7 @@ def mock_pandas_isna():
             yield
  main
 
+main
 main
 main
 main
