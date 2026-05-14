@@ -303,14 +303,12 @@ def build_poisson_timing_scenario(df_games, team_name, role, scenario_score, cut
     team_games = df_games[df_games[role_col] == team_norm].copy()
     if team_games.empty:
         return None
-    selected_games = []
-    for _, row in team_games.iterrows():
-        score_at_cutoff = (count_goals_until_fn(row["Min_Goals_H"], cutoff_minute), count_goals_until_fn(row["Min_Goals_A"], cutoff_minute))
-        if score_at_cutoff == scenario_score:
-            selected_games.append(row)
-    if not selected_games:
+    h_goals = team_games["Min_Goals_H"].apply(lambda mins: count_goals_until_fn(mins, cutoff_minute))
+    a_goals = team_games["Min_Goals_A"].apply(lambda mins: count_goals_until_fn(mins, cutoff_minute))
+    mask = (h_goals == scenario_score[0]) & (a_goals == scenario_score[1])
+    scenario_df = team_games[mask]
+    if scenario_df.empty:
         return None
-    scenario_df = pd.DataFrame(selected_games)
     future_home_goals = scenario_df["Min_Goals_H"].apply(lambda mins: count_goals_after_fn(mins, cutoff_minute))
     future_away_goals = scenario_df["Min_Goals_A"].apply(lambda mins: count_goals_after_fn(mins, cutoff_minute))
     future_total_goals = future_home_goals + future_away_goals

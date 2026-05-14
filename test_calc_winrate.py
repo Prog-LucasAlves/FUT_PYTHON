@@ -6,6 +6,9 @@ from calc_winrate import get_score_at_75
 
 
 
+from calc_winrate import get_score_at_75  # noqa: E402
+
+
 def side_effect_isna(val):
     import math
 
@@ -14,7 +17,11 @@ def side_effect_isna(val):
     if isinstance(val, float) and math.isnan(val):
         return True
     return False
+ perf-optimize-pandas-filter-10079845275900928112
 
+mock_pd.isna.side_effect = side_effect_isna
+
+=======
  code-health-refactor-load-historical-data-8712844606160724658
 
 mock_pd.isna.side_effect = side_effect_isna
@@ -29,6 +36,7 @@ def mock_pandas_isna():
             yield
  main
 
+main
 
 def test_get_score_at_75_null_cases():
     assert get_score_at_75(None) == 0
