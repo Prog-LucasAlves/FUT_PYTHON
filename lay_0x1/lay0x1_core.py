@@ -72,31 +72,23 @@ def get_last_10_team_summary(
 
     team_games = team_games.sort_values("Date", ascending=False).head(10).copy()
 
-    def summarize_match(row):
-        if row["Norm_Home"] == team_norm:
-            goals_for = int(row["Goals_H_FT"])
-            goals_against = int(row["Goals_A_FT"])
-        else:
-            goals_for = int(row["Goals_A_FT"])
-            goals_against = int(row["Goals_H_FT"])
+    is_home = team_games["Norm_Home"] == team_norm
+    goals_for = np.where(is_home, team_games["Goals_H_FT"], team_games["Goals_A_FT"]).astype(int)
+    goals_against = np.where(is_home, team_games["Goals_A_FT"], team_games["Goals_H_FT"]).astype(int)
 
-        if goals_for > goals_against:
-            result = "V"
-            points = 3
-        elif goals_for == goals_against:
-            result = "E"
-            points = 1
-        else:
-            result = "D"
-            points = 0
+    results = np.where(
+        goals_for > goals_against,
+        "V",
+        np.where(goals_for == goals_against, "E", "D"),
+    )
+    results = pd.Series(results, index=team_games.index)
 
-        return goals_for, goals_against, result, points
-
-    summaries = team_games.apply(summarize_match, axis=1)
-    goals_for = summaries.apply(lambda x: x[0])
-    goals_against = summaries.apply(lambda x: x[1])
-    results = summaries.apply(lambda x: x[2])
-    points = summaries.apply(lambda x: x[3])
+    points = np.where(
+        goals_for > goals_against,
+        3,
+        np.where(goals_for == goals_against, 1, 0),
+    )
+    points = pd.Series(points, index=team_games.index)
 
     wins = int((results == "V").sum())
     draws = int((results == "E").sum())
@@ -106,12 +98,13 @@ def get_last_10_team_summary(
     max_points = total_games * 3
 
     def build_ht_scenario_summary(df, ht_score):
-        def match_ht_score(row):
-            if row["Norm_Home"] == team_norm:
-                return row["Goals_H_HT"] == ht_score[0] and row["Goals_A_HT"] == ht_score[1]
-            return row["Goals_A_HT"] == ht_score[0] and row["Goals_H_HT"] == ht_score[1]
+        is_home_df = df["Norm_Home"] == team_norm
+        team_ht = np.where(is_home_df, df["Goals_H_HT"], df["Goals_A_HT"])
+        opp_ht = np.where(is_home_df, df["Goals_A_HT"], df["Goals_H_HT"])
 
-        scenario_games = df[df.apply(match_ht_score, axis=1)].copy()
+        scenario_mask = (team_ht == ht_score[0]) & (opp_ht == ht_score[1])
+        scenario_games = df[scenario_mask].copy()
+
         if scenario_games.empty:
             return {
                 "total": 0,
@@ -121,20 +114,14 @@ def get_last_10_team_summary(
                 "changed_score_to_75": 0,
             }
 
-        def score_until_75(row):
-            if row["Norm_Home"] == team_norm:
-                return count_goals_until(row["Min_Goals_H"], 75), count_goals_until(
-                    row["Min_Goals_A"],
-                    75,
-                )
-            return count_goals_until(row["Min_Goals_A"], 75), count_goals_until(
-                row["Min_Goals_H"],
-                75,
-            )
+        is_home_scenario = scenario_games["Norm_Home"] == team_norm
 
-        scores_75 = scenario_games.apply(score_until_75, axis=1)
-        team_scores_75 = scores_75.apply(lambda x: x[0])
-        opp_scores_75 = scores_75.apply(lambda x: x[1])
+        team_mins = np.where(is_home_scenario, scenario_games["Min_Goals_H"], scenario_games["Min_Goals_A"])
+        opp_mins = np.where(is_home_scenario, scenario_games["Min_Goals_A"], scenario_games["Min_Goals_H"])
+
+        team_scores_75 = np.array([count_goals_until(m, 75) for m in team_mins])
+        opp_scores_75 = np.array([count_goals_until(m, 75) for m in opp_mins])
+
         stayed_mask = (team_scores_75 == ht_score[0]) & (opp_scores_75 == ht_score[1])
 
         return {
