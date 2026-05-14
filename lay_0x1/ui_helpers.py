@@ -13,10 +13,6 @@ def render_section_header(kicker, heading):
     st.markdown(f'<div class="section-kicker">{kicker}</div><div class="section-heading">{heading}</div>', unsafe_allow_html=True)
 
 
-def render_badge(text, variant="info"):
-    st.markdown(f'<span class="badge {variant}">{text}</span>', unsafe_allow_html=True)
-
-
 def render_callout(variant, title, lines):
     color_map = {
         "success": "#00ff88",
