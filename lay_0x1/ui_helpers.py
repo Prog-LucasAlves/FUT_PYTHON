@@ -17,21 +17,6 @@ def render_badge(text, variant="info"):
     st.markdown(f'<span class="badge {variant}">{text}</span>', unsafe_allow_html=True)
 
 
-def render_callout(variant, title, lines):
-    color_map = {
-        "success": "#00ff88",
-        "warning": "#ffd56a",
-        "error": "#ff4b4b",
-        "info": "#4a9eff",
-    }
-    border = color_map.get(variant, "#4a9eff")
-    st.markdown(f'<div class="metric-card" style="border-left: 5px solid {border};">', unsafe_allow_html=True)
-    st.markdown(f'<div class="panel-title">{title}</div>', unsafe_allow_html=True)
-    for line in lines:
-        st.write(line)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
 def render_metric_card(title, value_lines, accent_color=None):
     style = f' style="border-left: 5px solid {accent_color};"' if accent_color else ""
     st.markdown(f'<div class="metric-card"{style}>', unsafe_allow_html=True)
