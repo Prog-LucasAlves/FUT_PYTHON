@@ -87,30 +87,27 @@ def save_resolved_unknown_team_names(names):
     UNKNOWN_TEAMS_RESOLVED_FILE.write_text(json.dumps(cleaned, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def load_historical_data():
-    merged_path = PROJECT_ROOT / "data_total" / "dados_historico.csv"
-    hist_path = PROJECT_ROOT / "data_total" / "dados_betfair.csv"
-    footy_path = PROJECT_ROOT / "data_total" / "dados_footystats.csv"
-
-    rebuild = False
-
+def _should_rebuild_cache(merged_path, hist_path, footy_path):
     if not merged_path.exists():
-        rebuild = True
-    else:
-        merged_mtime = merged_path.stat().st_mtime
-        if hist_path.exists() and hist_path.stat().st_mtime > merged_mtime:
-            rebuild = True
-        if footy_path.exists() and footy_path.stat().st_mtime > merged_mtime:
-            rebuild = True
+        return True
 
-    source_path = hist_path if rebuild else merged_path
+    merged_mtime = merged_path.stat().st_mtime
+    if hist_path.exists() and hist_path.stat().st_mtime > merged_mtime:
+        return True
+    if footy_path.exists() and footy_path.stat().st_mtime > merged_mtime:
+        return True
 
+    return False
+
+
+def _load_base_historical_data(source_path):
     if not source_path.exists():
         return pd.DataFrame()
 
     df = pd.read_csv(source_path, sep=";")
     if not _validate_columns(df, {"Date", "Home", "Away", "Goals_H_FT", "Goals_A_FT"}, "dados históricos"):
         return pd.DataFrame()
+
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.dropna(subset=["Goals_H_FT", "Goals_A_FT"])
 
@@ -121,76 +118,86 @@ def load_historical_data():
     df["Norm_Home"] = df["Home"].apply(normalize_team_name)
     df["Norm_Away"] = df["Away"].apply(normalize_team_name)
 
-    if footy_path.exists():
-        try:
-            df_footy = pd.read_csv(footy_path, sep=";")
-            if not _validate_columns(df_footy, {"Date", "Home", "Away"}, "dados FootyStats"):
-                return df
-            log_unknown_team_names(df_footy, "historical_footystats")
-            df_footy["Date"] = pd.to_datetime(df_footy["Date"])
-            df_footy["Home"] = df_footy["Home"].apply(map_team_name)
-            df_footy["Away"] = df_footy["Away"].apply(map_team_name)
+    return df
 
-            cols_to_merge = [
-                "Date",
-                "Home",
-                "Away",
-                "xG_H",
-                "xG_A",
-                "PPG_H_Pre",
-                "PPG_A_Pre",
-                "Possession_H",
-                "Possession_A",
-                "DangerousAttacks_H",
-                "DangerousAttacks_A",
-                "Shots_H",
-                "Shots_A",
-                "ShotsOnTarget_H",
-                "ShotsOnTarget_A",
-                "Corners_H",
-                "Corners_A",
-            ]
-            cols_to_merge = [c for c in cols_to_merge if c in df_footy.columns]
-            df_footy["Norm_Home"] = df_footy["Home"].apply(normalize_team_name)
-            df_footy["Norm_Away"] = df_footy["Away"].apply(normalize_team_name)
 
-            cols_to_merge_filtered = [c for c in cols_to_merge if c not in ["Home", "Away"]]
+def _merge_footystats_data(df, footy_path, rebuild, merged_path):
+    if not footy_path.exists():
+        return df
 
-            # Incluir colunas de gols e liga do FootyStats para casos onde o jogo não existe na Betfair
-            base_cols = ["Date", "Home", "Away", "Norm_Home", "Norm_Away", "League"]
-            goals_cols = ["Goals_H_FT", "Goals_A_FT", "Goals_H_Min", "Goals_A_Min"]
+    try:
+        df_footy = pd.read_csv(footy_path, sep=";")
+        if not _validate_columns(df_footy, {"Date", "Home", "Away"}, "dados FootyStats"):
+            return df
+        log_unknown_team_names(df_footy, "historical_footystats")
+        df_footy["Date"] = pd.to_datetime(df_footy["Date"])
+        df_footy["Home"] = df_footy["Home"].apply(map_team_name)
+        df_footy["Away"] = df_footy["Away"].apply(map_team_name)
 
-            all_footy_cols = list(set(base_cols + goals_cols + cols_to_merge_filtered))
-            all_footy_cols = [c for c in all_footy_cols if c in df_footy.columns]
+        cols_to_merge = [
+            "Date",
+            "Home",
+            "Away",
+            "xG_H",
+            "xG_A",
+            "PPG_H_Pre",
+            "PPG_A_Pre",
+            "Possession_H",
+            "Possession_A",
+            "DangerousAttacks_H",
+            "DangerousAttacks_A",
+            "Shots_H",
+            "Shots_A",
+            "ShotsOnTarget_H",
+            "ShotsOnTarget_A",
+            "Corners_H",
+            "Corners_A",
+        ]
+        cols_to_merge = [c for c in cols_to_merge if c in df_footy.columns]
+        df_footy["Norm_Home"] = df_footy["Home"].apply(normalize_team_name)
+        df_footy["Norm_Away"] = df_footy["Away"].apply(normalize_team_name)
 
-            footy_subset = df_footy[all_footy_cols].copy()
+        cols_to_merge_filtered = [c for c in cols_to_merge if c not in ["Home", "Away"]]
 
-            # Renomear colunas do FootyStats para o padrão da Betfair se necessário
-            footy_subset = footy_subset.rename(columns={"Goals_H_Min": "Goals_Min_H", "Goals_A_Min": "Goals_Min_A"})
+        # Incluir colunas de gols e liga do FootyStats para casos onde o jogo não existe na Betfair
+        base_cols = ["Date", "Home", "Away", "Norm_Home", "Norm_Away", "League"]
+        goals_cols = ["Goals_H_FT", "Goals_A_FT", "Goals_H_Min", "Goals_A_Min"]
 
-            footy_subset = footy_subset.drop_duplicates(subset=["Date", "Norm_Home", "Norm_Away"], keep="last")
+        all_footy_cols = list(set(base_cols + goals_cols + cols_to_merge_filtered))
+        all_footy_cols = [c for c in all_footy_cols if c in df_footy.columns]
 
-            if rebuild:
-                # Se for rebuild, fazemos outer merge para incluir jogos exclusivos do FootyStats
-                df = pd.merge(df, footy_subset, on=["Date", "Norm_Home", "Norm_Away"], how="outer", suffixes=("", "_footy"))
+        footy_subset = df_footy[all_footy_cols].copy()
 
-                # Preencher colunas principais com dados do FootyStats onde a Betfair é nula
-                for col in ["Home", "Away", "League", "Goals_H_FT", "Goals_A_FT", "Goals_Min_H", "Goals_Min_A"]:
-                    footy_col = f"{col}_footy" if f"{col}_footy" in df.columns else col
-                    if footy_col in df.columns and col in df.columns:
-                        df[col] = df[col].fillna(df[footy_col])
+        # Renomear colunas do FootyStats para o padrão da Betfair se necessário
+        footy_subset = footy_subset.rename(columns={"Goals_H_Min": "Goals_Min_H", "Goals_A_Min": "Goals_Min_A"})
 
-                # Limpar colunas auxiliares do merge
-                df = df.drop(columns=[c for c in df.columns if c.endswith("_footy")])
+        footy_subset = footy_subset.drop_duplicates(subset=["Date", "Norm_Home", "Norm_Away"], keep="last")
 
-                try:
-                    df.to_csv(merged_path, sep=";", index=False)
-                except Exception as e:
-                    st.sidebar.warning(f"Aviso: Não foi possível atualizar o cache dados_historico.csv: {e}")
+        if rebuild:
+            # Se for rebuild, fazemos outer merge para incluir jogos exclusivos do FootyStats
+            df = pd.merge(df, footy_subset, on=["Date", "Norm_Home", "Norm_Away"], how="outer", suffixes=("", "_footy"))
 
-        except Exception as e:
-            st.sidebar.warning(f"Erro ao mesclar FootyStats: {e}")
+            # Preencher colunas principais com dados do FootyStats onde a Betfair é nula
+            for col in ["Home", "Away", "League", "Goals_H_FT", "Goals_A_FT", "Goals_Min_H", "Goals_Min_A"]:
+                footy_col = f"{col}_footy" if f"{col}_footy" in df.columns else col
+                if footy_col in df.columns and col in df.columns:
+                    df[col] = df[col].fillna(df[footy_col])
 
+            # Limpar colunas auxiliares do merge
+            df = df.drop(columns=[c for c in df.columns if c.endswith("_footy")])
+
+            try:
+                df.to_csv(merged_path, sep=";", index=False)
+            except Exception as e:
+                st.sidebar.warning(f"Aviso: Não foi possível atualizar o cache dados_historico.csv: {e}")
+
+    except Exception as e:
+        st.sidebar.warning(f"Erro ao mesclar FootyStats: {e}")
+
+    return df
+
+
+def _parse_goal_minutes(df):
     def parse_minutes(x):
         try:
             if pd.isna(x) or x == "" or x == "[]":
@@ -206,6 +213,24 @@ def load_historical_data():
         df["Min_Goals_H"] = df["Min_Goals_H"].apply(parse_minutes)
     if "Min_Goals_A" in df.columns:
         df["Min_Goals_A"] = df["Min_Goals_A"].apply(parse_minutes)
+    return df
+
+
+def load_historical_data():
+    merged_path = PROJECT_ROOT / "data_total" / "dados_historico.csv"
+    hist_path = PROJECT_ROOT / "data_total" / "dados_betfair.csv"
+    footy_path = PROJECT_ROOT / "data_total" / "dados_footystats.csv"
+
+    rebuild = _should_rebuild_cache(merged_path, hist_path, footy_path)
+    source_path = hist_path if rebuild else merged_path
+
+    df = _load_base_historical_data(source_path)
+    if df.empty:
+        return df
+
+    df = _merge_footystats_data(df, footy_path, rebuild, merged_path)
+    df = _parse_goal_minutes(df)
+
     return df
 
 
