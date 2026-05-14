@@ -65,6 +65,8 @@ def calculate_lay_result(odd_entrada, valor_aposta, saida, odd_saida_75min):
 
 
 def build_bet_label(row_idx, row):
+    if hasattr(row, "data"):
+        return f"#{row_idx} | {row.data} {row.hora} | {row.mandante} vs {row.visitante} | {row.mercado}"
     return f"#{row_idx} | {row['data']} {row['hora']} | {row['mandante']} vs {row['visitante']} | {row['mercado']}"
 
 
