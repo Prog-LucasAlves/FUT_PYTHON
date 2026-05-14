@@ -51,6 +51,68 @@ def format_minutes(decimal_min):
     return f"{minutes}'{seconds:02d}\""
 
 
+def _summarize_match(row, team_norm):
+    if row["Norm_Home"] == team_norm:
+        goals_for = int(row["Goals_H_FT"])
+        goals_against = int(row["Goals_A_FT"])
+    else:
+        goals_for = int(row["Goals_A_FT"])
+        goals_against = int(row["Goals_H_FT"])
+
+    if goals_for > goals_against:
+        result = "V"
+        points = 3
+    elif goals_for == goals_against:
+        result = "E"
+        points = 1
+    else:
+        result = "D"
+        points = 0
+
+    return goals_for, goals_against, result, points
+
+
+def _build_ht_scenario_summary(df, ht_score, team_norm):
+    def match_ht_score(row):
+        if row["Norm_Home"] == team_norm:
+            return row["Goals_H_HT"] == ht_score[0] and row["Goals_A_HT"] == ht_score[1]
+        return row["Goals_A_HT"] == ht_score[0] and row["Goals_H_HT"] == ht_score[1]
+
+    scenario_games = df[df.apply(match_ht_score, axis=1)].copy()
+    if scenario_games.empty:
+        return {
+            "total": 0,
+            "home_goal_to_75": 0,
+            "away_goal_to_75": 0,
+            "stayed_score_to_75": 0,
+            "changed_score_to_75": 0,
+        }
+
+    def score_until_75(row):
+        if row["Norm_Home"] == team_norm:
+            return count_goals_until(row["Min_Goals_H"], 75), count_goals_until(
+                row["Min_Goals_A"],
+                75,
+            )
+        return count_goals_until(row["Min_Goals_A"], 75), count_goals_until(
+            row["Min_Goals_H"],
+            75,
+        )
+
+    scores_75 = scenario_games.apply(score_until_75, axis=1)
+    team_scores_75 = scores_75.apply(lambda x: x[0])
+    opp_scores_75 = scores_75.apply(lambda x: x[1])
+    stayed_mask = (team_scores_75 == ht_score[0]) & (opp_scores_75 == ht_score[1])
+
+    return {
+        "total": int(len(scenario_games)),
+        "home_goal_to_75": int((team_scores_75 > ht_score[0]).sum()),
+        "away_goal_to_75": int((opp_scores_75 > ht_score[1]).sum()),
+        "stayed_score_to_75": int(stayed_mask.sum()),
+        "changed_score_to_75": int((~stayed_mask).sum()),
+    }
+
+
 def get_last_10_team_summary(
     df_games,
     team_name,
@@ -72,27 +134,7 @@ def get_last_10_team_summary(
 
     team_games = team_games.sort_values("Date", ascending=False).head(10).copy()
 
-    def summarize_match(row):
-        if row["Norm_Home"] == team_norm:
-            goals_for = int(row["Goals_H_FT"])
-            goals_against = int(row["Goals_A_FT"])
-        else:
-            goals_for = int(row["Goals_A_FT"])
-            goals_against = int(row["Goals_H_FT"])
-
-        if goals_for > goals_against:
-            result = "V"
-            points = 3
-        elif goals_for == goals_against:
-            result = "E"
-            points = 1
-        else:
-            result = "D"
-            points = 0
-
-        return goals_for, goals_against, result, points
-
-    summaries = team_games.apply(summarize_match, axis=1)
+    summaries = team_games.apply(lambda row: _summarize_match(row, team_norm), axis=1)
     goals_for = summaries.apply(lambda x: x[0])
     goals_against = summaries.apply(lambda x: x[1])
     results = summaries.apply(lambda x: x[2])
@@ -105,6 +147,8 @@ def get_last_10_team_summary(
     total_games = len(team_games)
     max_points = total_games * 3
 
+refactor-get-last-10-team-summary-7786808499042491964
+=======
     def build_ht_scenario_summary(df, ht_score):
         is_home = df["Norm_Home"] == team_norm
         home_match = is_home & (df["Goals_H_HT"] == ht_score[0]) & (df["Goals_A_HT"] == ht_score[1])
@@ -143,6 +187,7 @@ def get_last_10_team_summary(
             "changed_score_to_75": int((~stayed_mask).sum()),
         }
 
+ main
     return {
         "form_sequence": " | ".join(results.tolist()),
         "record": f"{wins}V {draws}E {losses}D",
@@ -151,8 +196,8 @@ def get_last_10_team_summary(
         "win_rate": (wins / total_games) * 100 if total_games > 0 else 0.0,
         "target_score_count": int(((goals_for == target_score[0]) & (goals_against == target_score[1])).sum()),
         "games_analyzed": total_games,
-        "ht_00": build_ht_scenario_summary(team_games, (0, 0)),
-        "ht_01": build_ht_scenario_summary(team_games, (0, 1)),
+        "ht_00": _build_ht_scenario_summary(team_games, (0, 0), team_norm),
+        "ht_01": _build_ht_scenario_summary(team_games, (0, 1), team_norm),
     }
 
 
