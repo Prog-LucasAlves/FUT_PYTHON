@@ -1,3 +1,7 @@
+testing-improvements-get-goal-interval-stats-6927557433881083442
+import math
+from unittest.mock import MagicMock, patch
+=======
 improve-test-coverage-get-team-averages-10440019218018733583
 import math
 import sys
@@ -33,10 +37,10 @@ try:
 except KeyError:
     real_pandas = None
 main
+main
 
-# Mock pandas before importing calc_winrate
+# Create a mock for pandas
 mock_pd = MagicMock()
-sys.modules["pandas"] = mock_pd
 mock_pd.NA = "PD_NA"
 =======
 main
@@ -44,11 +48,15 @@ main
 
 
 
+
 def side_effect_isna(val):
+testing-improvements-get-goal-interval-stats-6927557433881083442
+=======
 improve-test-coverage-get-team-averages-10440019218018733583
 =======
     import math
 
+main
 main
     if val is None or val == "PD_NA":
         return True
@@ -73,8 +81,14 @@ main
 
 
 
+
 mock_pd.isna.side_effect = side_effect_isna
 
+testing-improvements-get-goal-interval-stats-6927557433881083442
+with patch.dict("sys.modules", {"pandas": mock_pd}):
+    from calc_winrate import get_score_at_75
+
+=======
 improve-test-coverage-get-team-averages-10440019218018733583
 # ruff: noqa: E402
 from calc_winrate import get_score_at_75, get_team_averages
@@ -190,6 +204,7 @@ def mock_pandas_isna():
             yield
  main
 
+main
 main
 main
 main
