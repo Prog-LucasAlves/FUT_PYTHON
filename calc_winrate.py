@@ -50,82 +50,83 @@ def get_score_at_75(min_str):
     return count
 
 
-df = pd.read_csv("data_total/dados_historico.csv", sep=";", low_memory=False)
+if __name__ == "__main__":
+    df = pd.read_csv("data_total/dados_historico.csv", sep=";", low_memory=False)
 
-team_avg_goals = get_team_averages(df)
+    team_avg_goals = get_team_averages(df)
 
-bins_h = [1.0, 1.3, 1.5, 1.7, 2.0, 2.5, 3.0, 100]
-labels_h = ["<1.3", "1.3-1.5", "1.5-1.7", "1.7-2.0", "2.1-2.5", "2.6-3.0", "3.0+"]
+    bins_h = [1.0, 1.3, 1.5, 1.7, 2.0, 2.5, 3.0, 100]
+    labels_h = ["<1.3", "1.3-1.5", "1.5-1.7", "1.7-2.0", "2.1-2.5", "2.6-3.0", "3.0+"]
 
-bins_over = [0, 1.6, 1.8, 2.0, 100]
-labels_over = ["<1.6", "1.6-1.8", "1.8-2.0", "2.0+"]
+    bins_over = [0, 1.6, 1.8, 2.0, 100]
+    labels_over = ["<1.6", "1.6-1.8", "1.8-2.0", "2.0+"]
 
-bins_btts = [0, 1.6, 1.8, 2.0, 100]
-labels_btts = ["<1.6", "1.6-1.8", "1.8-2.0", "2.0+"]
+    bins_btts = [0, 1.6, 1.8, 2.0, 100]
+    labels_btts = ["<1.6", "1.6-1.8", "1.8-2.0", "2.0+"]
 
-bins_lay = [0, 10, 15, 20, 30, 100]
-labels_lay = ["<10", "10-15", "15-20", "20-30", "30+"]
+    bins_lay = [0, 10, 15, 20, 30, 100]
+    labels_lay = ["<10", "10-15", "15-20", "20-30", "30+"]
 
-bins_avg_h = [0, 1.2, 1.5, 1.8, 5.0]
-labels_avg_h = ["<1.2", "1.2-1.5", "1.5-1.8", "1.8+"]
+    bins_avg_h = [0, 1.2, 1.5, 1.8, 5.0]
+    labels_avg_h = ["<1.2", "1.2-1.5", "1.5-1.8", "1.8+"]
 
-winning_brackets = [
-    ("2.1-2.5", "2.0+", "1.8-2.0", "10-15", "1.2-1.5"),
-    ("1.7-2.0", "2.0+", "2.0+", "15-20", "1.2-1.5"),
-    ("2.1-2.5", "1.6-1.8", "1.6-1.8", "15-20", "1.8+"),
-    ("2.1-2.5", "1.8-2.0", "1.6-1.8", "10-15", "1.2-1.5"),
-    ("<1.3", "<1.6", "1.8-2.0", "30+", "1.8+"),
-    ("1.5-1.7", "2.0+", "2.0+", "15-20", "1.5-1.8"),
-    ("1.3-1.5", "1.8-2.0", "2.0+", "20-30", "1.5-1.8"),
-    ("3.0+", "1.8-2.0", "1.6-1.8", "10-15", "1.8+"),
-    ("1.3-1.5", "<1.6", "1.8-2.0", "30+", "1.8+"),
-    ("3.0+", "2.0+", "2.0+", "<10", "1.5-1.8"),
-]
+    winning_brackets = [
+        ("2.1-2.5", "2.0+", "1.8-2.0", "10-15", "1.2-1.5"),
+        ("1.7-2.0", "2.0+", "2.0+", "15-20", "1.2-1.5"),
+        ("2.1-2.5", "1.6-1.8", "1.6-1.8", "15-20", "1.8+"),
+        ("2.1-2.5", "1.8-2.0", "1.6-1.8", "10-15", "1.2-1.5"),
+        ("<1.3", "<1.6", "1.8-2.0", "30+", "1.8+"),
+        ("1.5-1.7", "2.0+", "2.0+", "15-20", "1.5-1.8"),
+        ("1.3-1.5", "1.8-2.0", "2.0+", "20-30", "1.5-1.8"),
+        ("3.0+", "1.8-2.0", "1.6-1.8", "10-15", "1.8+"),
+        ("1.3-1.5", "<1.6", "1.8-2.0", "30+", "1.8+"),
+        ("3.0+", "2.0+", "2.0+", "<10", "1.5-1.8"),
+    ]
 
-total_selected = 0
-greens = 0
-reds_10 = 0
-reds_50 = 0
+    total_selected = 0
+    greens = 0
+    reds_10 = 0
+    reds_50 = 0
 
-total_profit = 0.0
-total_staked = 0.0
+    total_profit = 0.0
+    total_staked = 0.0
 
-for idx, row in df.iterrows():
-    bin_h = get_bin(row.get("Odd_H_Back"), bins_h, labels_h)
-    bin_over = get_bin(row.get("Odd_Over25_FT_Back"), bins_over, labels_over)
-    bin_btts = get_bin(row.get("Odd_BTTS_Yes_Back"), bins_btts, labels_btts)
-    bin_lay = get_bin(row.get("Odd_CS_0x1_Lay"), bins_lay, labels_lay)
+    for idx, row in df.iterrows():
+        bin_h = get_bin(row.get("Odd_H_Back"), bins_h, labels_h)
+        bin_over = get_bin(row.get("Odd_Over25_FT_Back"), bins_over, labels_over)
+        bin_btts = get_bin(row.get("Odd_BTTS_Yes_Back"), bins_btts, labels_btts)
+        bin_lay = get_bin(row.get("Odd_CS_0x1_Lay"), bins_lay, labels_lay)
 
-    home_avg = team_avg_goals.get(row["Home"], 0)
-    bin_avg_h = get_bin(home_avg, bins_avg_h, labels_avg_h)
+        home_avg = team_avg_goals.get(row["Home"], 0)
+        bin_avg_h = get_bin(home_avg, bins_avg_h, labels_avg_h)
 
-    if (bin_h, bin_over, bin_btts, bin_lay, bin_avg_h) in winning_brackets:
-        total_selected += 1
+        if (bin_h, bin_over, bin_btts, bin_lay, bin_avg_h) in winning_brackets:
+            total_selected += 1
 
-        odd_lay_val = row.get("Odd_CS_0x1_Lay", 0)
-        if pd.isna(odd_lay_val) or odd_lay_val == 0:
-            odd_lay_val = 15.0  # fallback average just in case
+            odd_lay_val = row.get("Odd_CS_0x1_Lay", 0)
+            if pd.isna(odd_lay_val) or odd_lay_val == 0:
+                odd_lay_val = 15.0  # fallback average just in case
 
-        liability = odd_lay_val - 1
-        stake = 1.0
-        total_staked += stake
+            liability = odd_lay_val - 1
+            stake = 1.0
+            total_staked += stake
 
-        goals_h_75 = get_score_at_75(row.get("Goals_Min_H"))
-        goals_a_75 = get_score_at_75(row.get("Goals_Min_A"))
+            goals_h_75 = get_score_at_75(row.get("Goals_Min_H"))
+            goals_a_75 = get_score_at_75(row.get("Goals_Min_A"))
 
-        if goals_h_75 == 0 and goals_a_75 == 0:
-            reds_10 += 1
-            # Loss is 10% of liability
-            total_profit -= 0.1 * liability
-        elif goals_h_75 == 0 and goals_a_75 == 1:
-            reds_50 += 1
-            # Loss is 50% of liability
-            total_profit -= 0.5 * liability
-        else:
-            greens += 1
-            # Win is the stake
-            total_profit += stake
+            if goals_h_75 == 0 and goals_a_75 == 0:
+                reds_10 += 1
+                # Loss is 10% of liability
+                total_profit -= 0.1 * liability
+            elif goals_h_75 == 0 and goals_a_75 == 1:
+                reds_50 += 1
+                # Loss is 50% of liability
+                total_profit -= 0.5 * liability
+            else:
+                greens += 1
+                # Win is the stake
+                total_profit += stake
 
-print(f"Total Selected Games: {total_selected}")
-print(f"Total Profit (Units): {total_profit:.2f}")
-print(f"ROI on Stake: {(total_profit / total_staked) * 100:.2f}%")
+    print(f"Total Selected Games: {total_selected}")
+    print(f"Total Profit (Units): {total_profit:.2f}")
+    print(f"ROI on Stake: {(total_profit / total_staked) * 100:.2f}%")
