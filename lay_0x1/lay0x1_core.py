@@ -429,6 +429,65 @@ def analyze_goal_timing(df_games, home_team, away_team, normalize_team_name_fn=n
     return stats_h, stats_a, stats_combined_scores
 
 
+def _first_goal_flags(row, role, normalize_goal_minute_fn):
+    gf, ga, mins_for, mins_against = _get_team_scores(row, role)
+    team_first = None
+    opp_first = None
+    if mins_for:
+        team_minutes = [m for m in (normalize_goal_minute_fn(x) for x in mins_for) if m is not None]
+        if team_minutes:
+            team_first = min(team_minutes)
+    if mins_against:
+        opp_minutes = [m for m in (normalize_goal_minute_fn(x) for x in mins_against) if m is not None]
+        if opp_minutes:
+            opp_first = min(opp_minutes)
+    if team_first is None and opp_first is None:
+        return {
+            "scored_first": False,
+            "suffered_first": False,
+            "scored_first_won": False,
+            "scored_first_draw": False,
+            "scored_first_lost": False,
+            "suffered_first_won": False,
+            "suffered_first_draw": False,
+            "suffered_first_lost": False,
+            "scored_first_ht": False,
+            "scored_first_ht_won": False,
+        }
+    scored_first = team_first is not None and (opp_first is None or team_first < opp_first)
+    suffered_first = opp_first is not None and (team_first is None or opp_first < team_first)
+    won = gf > ga
+    draw = gf == ga
+    lost = gf < ga
+    scored_first_ht = scored_first and team_first <= 45
+    return {
+        "scored_first": scored_first,
+        "suffered_first": suffered_first,
+        "scored_first_won": scored_first and won,
+        "scored_first_draw": scored_first and draw,
+        "scored_first_lost": scored_first and lost,
+        "suffered_first_won": suffered_first and won,
+        "suffered_first_draw": suffered_first and draw,
+        "suffered_first_lost": suffered_first and lost,
+        "scored_first_ht": scored_first_ht,
+        "scored_first_ht_won": scored_first_ht and won,
+    }
+
+
+def _get_team_scores(row, role):
+    if role == "home":
+        gf = int(row["Goals_H_FT"])
+        ga = int(row["Goals_A_FT"])
+        mins_for = row["Min_Goals_H"] if isinstance(row["Min_Goals_H"], list) else []
+        mins_against = row["Min_Goals_A"] if isinstance(row["Min_Goals_A"], list) else []
+    else:
+        gf = int(row["Goals_A_FT"])
+        ga = int(row["Goals_H_FT"])
+        mins_for = row["Min_Goals_A"] if isinstance(row["Min_Goals_A"], list) else []
+        mins_against = row["Min_Goals_H"] if isinstance(row["Min_Goals_H"], list) else []
+    return gf, ga, mins_for, mins_against
+
+
 def build_team_role_profile(df_games, team_name, role, normalize_team_name_fn=normalize_team_name):
     team_norm = normalize_team_name_fn(team_name)
     role_col = "Norm_Home" if role == "home" else "Norm_Away"
@@ -452,20 +511,7 @@ def build_team_role_profile(df_games, team_name, role, normalize_team_name_fn=no
 
     games = games.sort_values("Date", ascending=False).copy()
 
-    def get_team_scores(row):
-        if role == "home":
-            gf = int(row["Goals_H_FT"])
-            ga = int(row["Goals_A_FT"])
-            mins_for = row["Min_Goals_H"] if isinstance(row["Min_Goals_H"], list) else []
-            mins_against = row["Min_Goals_A"] if isinstance(row["Min_Goals_A"], list) else []
-        else:
-            gf = int(row["Goals_A_FT"])
-            ga = int(row["Goals_H_FT"])
-            mins_for = row["Min_Goals_A"] if isinstance(row["Min_Goals_A"], list) else []
-            mins_against = row["Min_Goals_H"] if isinstance(row["Min_Goals_H"], list) else []
-        return gf, ga, mins_for, mins_against
-
-    score_data = games.apply(get_team_scores, axis=1)
+    score_data = games.apply(lambda row: _get_team_scores(row, role), axis=1)
     goals_for = score_data.apply(lambda x: x[0])
     goals_against = score_data.apply(lambda x: x[1])
 
@@ -475,51 +521,7 @@ def build_team_role_profile(df_games, team_name, role, normalize_team_name_fn=no
     def ppg(subset):
         return float(points_series.loc[subset.index].mean()) if not subset.empty else 0.0
 
-    def first_goal_flags(row):
-        gf, ga, mins_for, mins_against = get_team_scores(row)
-        team_first = None
-        opp_first = None
-        if mins_for:
-            team_minutes = [m for m in (normalize_goal_minute(x) for x in mins_for) if m is not None]
-            if team_minutes:
-                team_first = min(team_minutes)
-        if mins_against:
-            opp_minutes = [m for m in (normalize_goal_minute(x) for x in mins_against) if m is not None]
-            if opp_minutes:
-                opp_first = min(opp_minutes)
-        if team_first is None and opp_first is None:
-            return {
-                "scored_first": False,
-                "suffered_first": False,
-                "scored_first_won": False,
-                "scored_first_draw": False,
-                "scored_first_lost": False,
-                "suffered_first_won": False,
-                "suffered_first_draw": False,
-                "suffered_first_lost": False,
-                "scored_first_ht": False,
-                "scored_first_ht_won": False,
-            }
-        scored_first = team_first is not None and (opp_first is None or team_first < opp_first)
-        suffered_first = opp_first is not None and (team_first is None or opp_first < team_first)
-        won = gf > ga
-        draw = gf == ga
-        lost = gf < ga
-        scored_first_ht = scored_first and team_first <= 45
-        return {
-            "scored_first": scored_first,
-            "suffered_first": suffered_first,
-            "scored_first_won": scored_first and won,
-            "scored_first_draw": scored_first and draw,
-            "scored_first_lost": scored_first and lost,
-            "suffered_first_won": suffered_first and won,
-            "suffered_first_draw": suffered_first and draw,
-            "suffered_first_lost": suffered_first and lost,
-            "scored_first_ht": scored_first_ht,
-            "scored_first_ht_won": scored_first_ht and won,
-        }
-
-    first_goal_df = games.apply(first_goal_flags, axis=1, result_type="expand")
+    first_goal_df = games.apply(lambda row: _first_goal_flags(row, role, normalize_goal_minute), axis=1, result_type="expand")
     total_games = len(games)
     wins = int((result_series == "W").sum())
     draws = int((result_series == "D").sum())
