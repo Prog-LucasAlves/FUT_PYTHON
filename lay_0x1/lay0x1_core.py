@@ -147,6 +147,47 @@ def get_last_10_team_summary(
     total_games = len(team_games)
     max_points = total_games * 3
 
+refactor-get-last-10-team-summary-7786808499042491964
+=======
+    def build_ht_scenario_summary(df, ht_score):
+        is_home = df["Norm_Home"] == team_norm
+        home_match = is_home & (df["Goals_H_HT"] == ht_score[0]) & (df["Goals_A_HT"] == ht_score[1])
+        away_match = (~is_home) & (df["Goals_A_HT"] == ht_score[0]) & (df["Goals_H_HT"] == ht_score[1])
+        scenario_games = df[home_match | away_match].copy()
+        if scenario_games.empty:
+            return {
+                "total": 0,
+                "home_goal_to_75": 0,
+                "away_goal_to_75": 0,
+                "stayed_score_to_75": 0,
+                "changed_score_to_75": 0,
+            }
+
+        def score_until_75(row):
+            if row["Norm_Home"] == team_norm:
+                return count_goals_until(row["Min_Goals_H"], 75), count_goals_until(
+                    row["Min_Goals_A"],
+                    75,
+                )
+            return count_goals_until(row["Min_Goals_A"], 75), count_goals_until(
+                row["Min_Goals_H"],
+                75,
+            )
+
+        scores_75 = scenario_games.apply(score_until_75, axis=1)
+        team_scores_75 = scores_75.apply(lambda x: x[0])
+        opp_scores_75 = scores_75.apply(lambda x: x[1])
+        stayed_mask = (team_scores_75 == ht_score[0]) & (opp_scores_75 == ht_score[1])
+
+        return {
+            "total": int(len(scenario_games)),
+            "home_goal_to_75": int((team_scores_75 > ht_score[0]).sum()),
+            "away_goal_to_75": int((opp_scores_75 > ht_score[1]).sum()),
+            "stayed_score_to_75": int(stayed_mask.sum()),
+            "changed_score_to_75": int((~stayed_mask).sum()),
+        }
+
+ main
     return {
         "form_sequence": " | ".join(results.tolist()),
         "record": f"{wins}V {draws}E {losses}D",
