@@ -16,6 +16,10 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pre-commit>=4.5.1",
+=======
+    "pytest>=9.0.3",
+
+    "pytest-mock>=3.15.1",
 ]
 
 [tool.ruff.lint]
@@ -30,3 +34,6 @@ ignore = ["E731"]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E731"]  # Permite lambda apenas em testes
 "legacy/*" = ["E731"]  # Igno
+
+[tool.ruff.lint.extend-per-file-ignores]
+"test_calc_winrate.py" = ["E402"]
