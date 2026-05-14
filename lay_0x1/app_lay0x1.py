@@ -454,6 +454,7 @@ with main_tab:
                                 min_value=1.01,
                                 value=float(m_data.get("Odd_CS_0x1_Lay", 0) or 1.01),
                                 step=0.01,
+                                help="A odd (cotação) atual no momento da entrada.",
                             )
                         with f2:
                             valor_aposta = st.number_input(
@@ -461,6 +462,7 @@ with main_tab:
                                 min_value=0.01,
                                 value=10.0,
                                 step=1.0,
+                                help="O valor da aposta a ser realizada.",
                             )
                         with f3:
                             responsabilidade = calculate_lay_liability(odd_entrada, valor_aposta)
@@ -620,7 +622,7 @@ with bets_tab:
     st.subheader("🧾 Planilha de Apostas")
     df_bets_all = load_lay_bets()
     if df_bets_all.empty:
-        st.info("Nenhuma entrada registrada ainda.")
+        st.info("👋 Nenhuma entrada registrada ainda. Vá para a aba '🛡️ Análise' e use o painel '💰 Registrar Aposta' para começar!")
     else:
         st.dataframe(style_bets_dataframe(df_bets_all.iloc[::-1]), use_container_width=True)
 
@@ -649,6 +651,7 @@ with bets_tab:
                 step=0.01,
                 disabled=saida_edit != "75min",
                 key=f"odd_saida_edit_lay01_{selected_bet_idx}",
+                help="A odd esperada ou real no momento da saída.",
             )
         with e3:
             resultado_preview = calculate_lay_result(
@@ -817,7 +820,7 @@ with notes_tab:
                 if image_path and Path(image_path).exists():
                     st.image(image_path, caption="Printscreen anexado", use_container_width=True)
     else:
-        st.info("Nenhuma nota criada ainda.")
+        st.info("📝 Nenhuma nota criada ainda. Utilize os campos acima para registrar suas primeiras anotações e insights!")
 
     st.markdown("---")
     new_note_form = render_new_note_form(NOTE_PRIORITY_OPTIONS, NOTE_STATUS_OPTIONS)
