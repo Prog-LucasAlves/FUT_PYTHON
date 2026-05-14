@@ -1,24 +1,226 @@
+testing-improvements-get-goal-interval-stats-6927557433881083442
 import math
 from unittest.mock import MagicMock, patch
+=======
+improve-test-coverage-get-team-averages-10440019218018733583
+import math
+import sys
+from unittest.mock import MagicMock
+=======
+from unittest.mock import patch
+
+import pytest
+
+from calc_winrate import get_score_at_75
+
+
+
+from calc_winrate import get_score_at_75  # noqa: E402
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+testing-get-h2h-stats-12003657326519340250
+# Save real pandas
+try:
+    real_pandas = sys.modules.get("pandas")
+except KeyError:
+    real_pandas = None
+main
+main
 
 # Create a mock for pandas
 mock_pd = MagicMock()
 mock_pd.NA = "PD_NA"
+=======
+main
+
+
+
 
 
 def side_effect_isna(val):
+testing-improvements-get-goal-interval-stats-6927557433881083442
+=======
+improve-test-coverage-get-team-averages-10440019218018733583
+=======
+    import math
+
+main
+main
     if val is None or val == "PD_NA":
         return True
     if isinstance(val, float) and math.isnan(val):
         return True
     return False
+ perf-optimize-pandas-filter-10079845275900928112
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 mock_pd.isna.side_effect = side_effect_isna
 
+testing-improvements-get-goal-interval-stats-6927557433881083442
 with patch.dict("sys.modules", {"pandas": mock_pd}):
     from calc_winrate import get_score_at_75
 
+=======
+improve-test-coverage-get-team-averages-10440019218018733583
+# ruff: noqa: E402
+from calc_winrate import get_score_at_75, get_team_averages
+
+=======
+add-get-bin-tests-12494535335657648525
+from calc_winrate import get_bin, get_score_at_75  # noqa: E402
+
+
+def test_get_bin_null_cases():
+    bins = [1.0, 1.5, 2.0]
+    labels = ["Low", "High"]
+    assert get_bin(None, bins, labels) is None
+    assert get_bin("PD_NA", bins, labels) is None
+    assert get_bin(float("nan"), bins, labels) is None
+
+
+def test_get_bin_within_bins():
+    bins = [1.0, 1.3, 1.5, 1.7, 2.0]
+    labels = ["<1.3", "1.3-1.5", "1.5-1.7", "1.7-2.0"]
+    assert get_bin(1.2, bins, labels) == "<1.3"
+    assert get_bin(1.4, bins, labels) == "1.3-1.5"
+    assert get_bin(1.6, bins, labels) == "1.5-1.7"
+    assert get_bin(1.9, bins, labels) == "1.7-2.0"
+
+
+def test_get_bin_boundaries():
+    bins = [1.0, 1.3, 1.5, 1.7, 2.0]
+    labels = ["<1.3", "1.3-1.5", "1.5-1.7", "1.7-2.0"]
+    # The condition is bins[i] < val <= bins[i+1]
+    # So 1.3 should fall in the first bin, 1.5 in the second, etc.
+    assert get_bin(1.3, bins, labels) == "<1.3"
+    assert get_bin(1.5, bins, labels) == "1.3-1.5"
+    assert get_bin(1.7, bins, labels) == "1.5-1.7"
+    assert get_bin(2.0, bins, labels) == "1.7-2.0"
+
+
+def test_get_bin_out_of_bounds():
+    bins = [1.0, 1.3, 1.5, 1.7, 2.0]
+    labels = ["<1.3", "1.3-1.5", "1.5-1.7", "1.7-2.0"]
+    # Values lower than the first bin should fall back to the last label
+    assert get_bin(0.5, bins, labels) == "1.7-2.0"
+    assert get_bin(1.0, bins, labels) == "1.7-2.0"  # <= bins[0] is not caught in the loop
+    # Values higher than the last bin should also fall back to the last label
+    assert get_bin(2.5, bins, labels) == "1.7-2.0"
+
+=======
+testing-get-h2h-stats-12003657326519340250
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+perf/vectorize-apply-calls-8078529625125405622
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+testing-normalize-team-name-13824944143605608504
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+test/getDataDay-integration-11262913659135874285
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+test-count-goals-after-12096316838107574234
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+test-improvement-count-goals-until-7699974727400148533
+# noqa: E402
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+from calc_winrate import get_score_at_75  # noqa: E402
+
+perf-optimize-df-iteration-11225556803500659665
+=======
+=======
+improve-testing-data-utils-5532844099891188372
+from calc_winrate import get_score_at_75
+=======
+test-integration-main-getDataTotalBetfair-8008597018345525812
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+test-normalize-goal-minute-15310691816714300964
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+add-tests-data-utils-14826260309306633571
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+remove-unused-render-badge-10106806103153642180
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+remove-unused-render-callout-15998711541426404829
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+=======
+ code-health-refactor-load-historical-data-8712844606160724658
+
+mock_pd.isna.side_effect = side_effect_isna
+
+from calc_winrate import get_score_at_75  # noqa: E402
+=======
+
+@pytest.fixture(autouse=True)
+def mock_pandas_isna():
+    with patch("pandas.isna", side_effect=side_effect_isna):
+        with patch("pandas.NA", "PD_NA"):
+            yield
+ main
+
+main
+main
+main
+main
+main
+main
+main
+main
+main
+main
+main
+main
+main
+main
+main
+main
+main
 
 def test_get_score_at_75_null_cases():
     assert get_score_at_75(None) == 0
@@ -59,3 +261,69 @@ def test_get_score_at_75_boundaries():
     assert get_score_at_75("74") == 1
     assert get_score_at_75("75") == 1
     assert get_score_at_75("76") == 0
+
+
+improve-test-coverage-get-team-averages-10440019218018733583
+def test_get_team_averages_basic():
+    # We are using mock_pd so we need to construct a MagicMock that behaves like the dataframe.
+
+    # Let's mock home_goals
+    mock_df = MagicMock()
+
+    mock_home_groupby = MagicMock()
+    mock_away_groupby = MagicMock()
+
+    def groupby_side_effect(col):
+        if col == "Home":
+            return mock_home_groupby
+        elif col == "Away":
+            return mock_away_groupby
+
+    mock_df.groupby.side_effect = groupby_side_effect
+
+    # We also need to mock the dataframe slices
+    mock_home_goals_series = MagicMock()
+    mock_home_games_series = MagicMock()
+    mock_away_goals_series = MagicMock()
+    mock_away_games_series = MagicMock()
+
+    mock_home_groupby.__getitem__.side_effect = lambda key: mock_home_goals_series if key == "Goals_H_FT" else mock_home_games_series
+    mock_away_groupby.__getitem__.side_effect = lambda key: mock_away_goals_series if key == "Goals_A_FT" else mock_away_games_series
+
+    mock_home_goals_sum = MagicMock()
+    mock_home_games_count = MagicMock()
+    mock_away_goals_sum = MagicMock()
+    mock_away_games_count = MagicMock()
+
+    mock_home_goals_series.sum.return_value = mock_home_goals_sum
+    mock_home_games_series.count.return_value = mock_home_games_count
+    mock_away_goals_series.sum.return_value = mock_away_goals_sum
+    mock_away_games_series.count.return_value = mock_away_games_count
+
+    mock_total_goals = MagicMock()
+    mock_total_games = MagicMock()
+
+    mock_home_goals_sum.add.return_value = mock_total_goals
+    mock_home_games_count.add.return_value = mock_total_games
+
+    mock_division_result = MagicMock()
+    mock_total_goals.__truediv__.return_value = mock_division_result
+
+    mock_division_result.to_dict.return_value = {"TeamA": 2.0, "TeamB": 1.0}
+
+    result = get_team_averages(mock_df)
+
+    assert result == {"TeamA": 2.0, "TeamB": 1.0}
+    mock_df.groupby.assert_any_call("Home")
+    mock_df.groupby.assert_any_call("Away")
+    mock_home_goals_sum.add.assert_called_once_with(mock_away_goals_sum, fill_value=0)
+    mock_home_games_count.add.assert_called_once_with(mock_away_games_count, fill_value=0)
+    mock_total_goals.__truediv__.assert_called_once_with(mock_total_games)
+    mock_division_result.to_dict.assert_called_once()
+=======
+# Restore pandas
+if real_pandas is not None:
+    sys.modules["pandas"] = real_pandas
+else:
+    del sys.modules["pandas"]
+main

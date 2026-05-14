@@ -626,7 +626,7 @@ with bets_tab:
     else:
         st.dataframe(style_bets_dataframe(df_bets_all.iloc[::-1]), use_container_width=True)
 
-        options_map = {build_bet_label(idx, row): idx for idx, row in df_bets_all.iloc[::-1].iterrows()}
+        options_map = {build_bet_label(row.Index, row): row.Index for row in df_bets_all.iloc[::-1].itertuples()}
         selected_bet_label = st.selectbox(
             "Selecione uma entrada para atualizar saída ou excluir",
             list(options_map.keys()),
