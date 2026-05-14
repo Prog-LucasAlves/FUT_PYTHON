@@ -1,10 +1,19 @@
-import sys
-from unittest.mock import MagicMock
+from unittest.mock import patch
 
-# Mock pandas before importing calc_winrate
-mock_pd = MagicMock()
-sys.modules["pandas"] = mock_pd
-mock_pd.NA = "PD_NA"
+import pytest
+
+from calc_winrate import get_score_at_75
+
+
+
+from calc_winrate import get_score_at_75  # noqa: E402
+
+
+
+
+
+
+
 
 
 def side_effect_isna(val):
@@ -15,12 +24,65 @@ def side_effect_isna(val):
     if isinstance(val, float) and math.isnan(val):
         return True
     return False
+ perf-optimize-pandas-filter-10079845275900928112
+
+
+
+
+
+
 
 
 mock_pd.isna.side_effect = side_effect_isna
 
 from calc_winrate import get_score_at_75  # noqa: E402
 
+=======
+improve-testing-data-utils-5532844099891188372
+from calc_winrate import get_score_at_75
+=======
+test-integration-main-getDataTotalBetfair-8008597018345525812
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+test-normalize-goal-minute-15310691816714300964
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+add-tests-data-utils-14826260309306633571
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+remove-unused-render-badge-10106806103153642180
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+remove-unused-render-callout-15998711541426404829
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
+=======
+ code-health-refactor-load-historical-data-8712844606160724658
+
+mock_pd.isna.side_effect = side_effect_isna
+
+from calc_winrate import get_score_at_75  # noqa: E402
+=======
+
+@pytest.fixture(autouse=True)
+def mock_pandas_isna():
+    with patch("pandas.isna", side_effect=side_effect_isna):
+        with patch("pandas.NA", "PD_NA"):
+            yield
+ main
+
+main
+main
+main
+main
+main
+main
+main
 
 def test_get_score_at_75_null_cases():
     assert get_score_at_75(None) == 0
