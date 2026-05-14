@@ -1,10 +1,9 @@
-import sys
-from unittest.mock import MagicMock
+from unittest.mock import patch
 
-# Mock pandas before importing calc_winrate
-mock_pd = MagicMock()
-sys.modules["pandas"] = mock_pd
-mock_pd.NA = "PD_NA"
+import pytest
+
+from calc_winrate import get_score_at_75
+
 
 
 def side_effect_isna(val):
@@ -16,10 +15,19 @@ def side_effect_isna(val):
         return True
     return False
 
+ code-health-refactor-load-historical-data-8712844606160724658
 
 mock_pd.isna.side_effect = side_effect_isna
 
 from calc_winrate import get_score_at_75  # noqa: E402
+=======
+
+@pytest.fixture(autouse=True)
+def mock_pandas_isna():
+    with patch("pandas.isna", side_effect=side_effect_isna):
+        with patch("pandas.NA", "PD_NA"):
+            yield
+ main
 
 
 def test_get_score_at_75_null_cases():
