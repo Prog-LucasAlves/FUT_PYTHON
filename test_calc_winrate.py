@@ -21,6 +21,20 @@ from calc_winrate import get_score_at_75  # noqa: E402
 
 
 
+testing-get-h2h-stats-12003657326519340250
+# Save real pandas
+try:
+    real_pandas = sys.modules.get("pandas")
+except KeyError:
+    real_pandas = None
+
+# Mock pandas before importing calc_winrate
+mock_pd = MagicMock()
+sys.modules["pandas"] = mock_pd
+mock_pd.NA = "PD_NA"
+=======
+main
+
 
 def side_effect_isna(val):
     import math
@@ -45,8 +59,13 @@ def side_effect_isna(val):
 
 
 
+
 mock_pd.isna.side_effect = side_effect_isna
 
+testing-get-h2h-stats-12003657326519340250
+from calc_winrate import get_score_at_75  # noqa: E402
+
+=======
 perf/vectorize-apply-calls-8078529625125405622
 from calc_winrate import get_score_at_75  # noqa: E402
 
@@ -124,6 +143,7 @@ main
 main
 main
 main
+main
 
 def test_get_score_at_75_null_cases():
     assert get_score_at_75(None) == 0
@@ -164,3 +184,10 @@ def test_get_score_at_75_boundaries():
     assert get_score_at_75("74") == 1
     assert get_score_at_75("75") == 1
     assert get_score_at_75("76") == 0
+
+
+# Restore pandas
+if real_pandas is not None:
+    sys.modules["pandas"] = real_pandas
+else:
+    del sys.modules["pandas"]
