@@ -16,6 +16,7 @@ from calc_winrate import get_score_at_75  # noqa: E402
 
 
 
+
 def side_effect_isna(val):
     import math
 
@@ -33,10 +34,13 @@ def side_effect_isna(val):
 
 
 
+
 mock_pd.isna.side_effect = side_effect_isna
 
 from calc_winrate import get_score_at_75  # noqa: E402
 
+perf-optimize-df-iteration-11225556803500659665
+=======
 =======
 improve-testing-data-utils-5532844099891188372
 from calc_winrate import get_score_at_75
@@ -76,6 +80,7 @@ def mock_pandas_isna():
             yield
  main
 
+main
 main
 main
 main
