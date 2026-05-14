@@ -1,3 +1,8 @@
+improve-test-coverage-get-team-averages-10440019218018733583
+import math
+import sys
+from unittest.mock import MagicMock
+=======
 from unittest.mock import patch
 
 import pytest
@@ -27,6 +32,7 @@ try:
     real_pandas = sys.modules.get("pandas")
 except KeyError:
     real_pandas = None
+main
 
 # Mock pandas before importing calc_winrate
 mock_pd = MagicMock()
@@ -37,9 +43,13 @@ main
 
 
 
+
 def side_effect_isna(val):
+improve-test-coverage-get-team-averages-10440019218018733583
+=======
     import math
 
+main
     if val is None or val == "PD_NA":
         return True
     if isinstance(val, float) and math.isnan(val):
@@ -62,8 +72,14 @@ def side_effect_isna(val):
 
 
 
+
 mock_pd.isna.side_effect = side_effect_isna
 
+improve-test-coverage-get-team-averages-10440019218018733583
+# ruff: noqa: E402
+from calc_winrate import get_score_at_75, get_team_averages
+
+=======
 add-get-bin-tests-12494535335657648525
 from calc_winrate import get_bin, get_score_at_75  # noqa: E402
 
@@ -189,6 +205,7 @@ main
 main
 main
 main
+main
 
 def test_get_score_at_75_null_cases():
     assert get_score_at_75(None) == 0
@@ -231,8 +248,67 @@ def test_get_score_at_75_boundaries():
     assert get_score_at_75("76") == 0
 
 
+improve-test-coverage-get-team-averages-10440019218018733583
+def test_get_team_averages_basic():
+    # We are using mock_pd so we need to construct a MagicMock that behaves like the dataframe.
+
+    # Let's mock home_goals
+    mock_df = MagicMock()
+
+    mock_home_groupby = MagicMock()
+    mock_away_groupby = MagicMock()
+
+    def groupby_side_effect(col):
+        if col == "Home":
+            return mock_home_groupby
+        elif col == "Away":
+            return mock_away_groupby
+
+    mock_df.groupby.side_effect = groupby_side_effect
+
+    # We also need to mock the dataframe slices
+    mock_home_goals_series = MagicMock()
+    mock_home_games_series = MagicMock()
+    mock_away_goals_series = MagicMock()
+    mock_away_games_series = MagicMock()
+
+    mock_home_groupby.__getitem__.side_effect = lambda key: mock_home_goals_series if key == "Goals_H_FT" else mock_home_games_series
+    mock_away_groupby.__getitem__.side_effect = lambda key: mock_away_goals_series if key == "Goals_A_FT" else mock_away_games_series
+
+    mock_home_goals_sum = MagicMock()
+    mock_home_games_count = MagicMock()
+    mock_away_goals_sum = MagicMock()
+    mock_away_games_count = MagicMock()
+
+    mock_home_goals_series.sum.return_value = mock_home_goals_sum
+    mock_home_games_series.count.return_value = mock_home_games_count
+    mock_away_goals_series.sum.return_value = mock_away_goals_sum
+    mock_away_games_series.count.return_value = mock_away_games_count
+
+    mock_total_goals = MagicMock()
+    mock_total_games = MagicMock()
+
+    mock_home_goals_sum.add.return_value = mock_total_goals
+    mock_home_games_count.add.return_value = mock_total_games
+
+    mock_division_result = MagicMock()
+    mock_total_goals.__truediv__.return_value = mock_division_result
+
+    mock_division_result.to_dict.return_value = {"TeamA": 2.0, "TeamB": 1.0}
+
+    result = get_team_averages(mock_df)
+
+    assert result == {"TeamA": 2.0, "TeamB": 1.0}
+    mock_df.groupby.assert_any_call("Home")
+    mock_df.groupby.assert_any_call("Away")
+    mock_home_goals_sum.add.assert_called_once_with(mock_away_goals_sum, fill_value=0)
+    mock_home_games_count.add.assert_called_once_with(mock_away_games_count, fill_value=0)
+    mock_total_goals.__truediv__.assert_called_once_with(mock_total_games)
+    mock_division_result.to_dict.assert_called_once()
+=======
 # Restore pandas
 if real_pandas is not None:
     sys.modules["pandas"] = real_pandas
 else:
     del sys.modules["pandas"]
+main
